@@ -5,6 +5,6 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       { userAgent: "*", allow: "/", disallow: ["/app", "/app/"] },
     ],
-    sitemap: "https://orbly.vercel.app/sitemap.xml",
+    sitemap: "https://orbly-drab.vercel.app/sitemap.xml",
   };
 }

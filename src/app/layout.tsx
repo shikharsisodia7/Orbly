@@ -12,7 +12,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const SITE_URL = "https://orbly.vercel.app";
+const SITE_URL = "https://orbly-drab.vercel.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

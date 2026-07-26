@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const SITE_URL = "https://orbly.vercel.app";
+const SITE_URL = "https://orbly-drab.vercel.app";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
