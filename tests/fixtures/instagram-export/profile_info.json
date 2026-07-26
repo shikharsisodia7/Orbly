@@ -1,0 +1,14 @@
+{
+  "profile_user": [
+    {
+      "string_map_data": {
+        "Name": {
+          "value": "Synthetic Test User"
+        },
+        "Email": {
+          "value": "not-a-real-email@example.com"
+        }
+      }
+    }
+  ]
+}
