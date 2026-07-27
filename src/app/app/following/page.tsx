@@ -1,7 +1,7 @@
 "use client";
 
 import { PageHeader } from "@/components/dashboard/PageHeader";
-import { RequireSnapshot } from "@/components/dashboard/RequireSnapshot";
+import { RequireUsableSnapshot } from "@/components/dashboard/RequireUsableSnapshot";
 import { ReadOnlyRelationshipList } from "@/components/dashboard/ReadOnlyRelationshipList";
 import { Badge } from "@/components/ui/Badge";
 import { useSnapshotFollowers, useSnapshotFollowing } from "@/hooks/useRelationships";
@@ -32,5 +32,5 @@ function FollowingContent({ snapshotId }: { snapshotId: string }) {
 }
 
 export default function FollowingPage() {
-  return <RequireSnapshot>{(latest) => <FollowingContent snapshotId={latest.id} />}</RequireSnapshot>;
+  return <RequireUsableSnapshot>{(latest) => <FollowingContent snapshotId={latest.id} />}</RequireUsableSnapshot>;
 }

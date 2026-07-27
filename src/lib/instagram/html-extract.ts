@@ -31,6 +31,7 @@ export function extractCoverageFromHtml(html: string): ExportCoverage | null {
     toIso: new Date(toMs).toISOString(),
     spanDays,
     looksLimited: spanDays < ALL_TIME_MIN_SPAN_DAYS,
+    source: "meta-explicit",
   };
 }
 
@@ -107,27 +108,41 @@ function extractFromBlock(block: string): Relationship | null {
   };
 }
 
+export interface HtmlExtractionResult {
+  relationships: Relationship[];
+  /** Total repeating record blocks found, before any parsing was attempted. */
+  rawRecords: number;
+  /** Blocks that were found but could not be turned into a valid relationship — never silently vanish uncounted. */
+  invalidRecords: number;
+}
+
 /**
  * Extracts relationship records from Meta's HTML-format follower/following
  * export files. Each record lives in its own repeating container div, so we
  * split on the marker and parse each fragment independently — a malformed
- * or unexpected fragment is simply skipped rather than aborting the import.
+ * or unexpected fragment is skipped rather than aborting the import, but is
+ * still counted as an invalid record so parsing loss is never invisible.
  */
-export function extractRelationshipsFromHtml(html: string): Relationship[] {
+export function extractRelationshipsFromHtml(html: string): HtmlExtractionResult {
   const starts: number[] = [];
   let match: RegExpExecArray | null;
   BLOCK_MARKER.lastIndex = 0;
   while ((match = BLOCK_MARKER.exec(html))) {
     starts.push(match.index);
   }
-  if (starts.length === 0) return [];
+  if (starts.length === 0) return { relationships: [], rawRecords: 0, invalidRecords: 0 };
 
   starts.push(html.length);
-  const out: Relationship[] = [];
+  const relationships: Relationship[] = [];
+  let invalidRecords = 0;
   for (let i = 0; i < starts.length - 1; i++) {
     const block = html.slice(starts[i], starts[i + 1]);
     const rel = extractFromBlock(block);
-    if (rel) out.push(rel);
+    if (rel) {
+      relationships.push(rel);
+    } else {
+      invalidRecords++;
+    }
   }
-  return out;
+  return { relationships, rawRecords: starts.length - 1, invalidRecords };
 }

@@ -19,29 +19,47 @@ const FOLLOWING_HTML = `
 
 describe("extractRelationshipsFromHtml", () => {
   it("extracts username, profile url and timestamp from the plain-anchor format", () => {
-    const result = extractRelationshipsFromHtml(FOLLOWERS_HTML);
-    expect(result).toHaveLength(2);
-    expect(result[0].normalizedUsername).toBe("river.sample");
-    expect(result[0].profileUrl).toBe("https://www.instagram.com/river.sample/");
-    expect(result[0].timestamp).not.toBeNull();
-    expect(result[1].normalizedUsername).toBe("maya.sample");
+    const { relationships, rawRecords, invalidRecords } = extractRelationshipsFromHtml(FOLLOWERS_HTML);
+    expect(relationships).toHaveLength(2);
+    expect(rawRecords).toBe(2);
+    expect(invalidRecords).toBe(0);
+    expect(relationships[0].normalizedUsername).toBe("river.sample");
+    expect(relationships[0].profileUrl).toBe("https://www.instagram.com/river.sample/");
+    expect(relationships[0].timestamp).not.toBeNull();
+    expect(relationships[1].normalizedUsername).toBe("maya.sample");
   });
 
   it("prefers the h2 username and resolves an internal _u/ redirect href", () => {
-    const result = extractRelationshipsFromHtml(FOLLOWING_HTML);
-    expect(result).toHaveLength(1);
-    expect(result[0].normalizedUsername).toBe("jordan.sample");
-    expect(result[0].profileUrl).toBe("https://www.instagram.com/jordan.sample/");
+    const { relationships } = extractRelationshipsFromHtml(FOLLOWING_HTML);
+    expect(relationships).toHaveLength(1);
+    expect(relationships[0].normalizedUsername).toBe("jordan.sample");
+    expect(relationships[0].profileUrl).toBe("https://www.instagram.com/jordan.sample/");
   });
 
-  it("returns an empty array for unrelated HTML", () => {
-    expect(extractRelationshipsFromHtml("<html><body>hello</body></html>")).toHaveLength(0);
+  it("returns no relationships and no raw records for unrelated HTML", () => {
+    const result = extractRelationshipsFromHtml("<html><body>hello</body></html>");
+    expect(result.relationships).toHaveLength(0);
+    expect(result.rawRecords).toBe(0);
   });
 
-  it("skips malformed blocks instead of throwing", () => {
+  it("counts malformed blocks as invalid instead of silently dropping them", () => {
     const malformed = `<div class="pam uiBoxWhite noborder"><p>no anchor or h2 here</p></div>`;
     expect(() => extractRelationshipsFromHtml(malformed)).not.toThrow();
-    expect(extractRelationshipsFromHtml(malformed)).toHaveLength(0);
+    const result = extractRelationshipsFromHtml(malformed);
+    expect(result.relationships).toHaveLength(0);
+    expect(result.rawRecords).toBe(1);
+    expect(result.invalidRecords).toBe(1);
+  });
+
+  it("counts a mix of valid and invalid blocks correctly", () => {
+    const mixed = FOLLOWERS_HTML.replace(
+      "</main>",
+      `<div class="pam uiBoxWhite noborder"><p>broken block</p></div></main>`
+    );
+    const result = extractRelationshipsFromHtml(mixed);
+    expect(result.rawRecords).toBe(3);
+    expect(result.relationships).toHaveLength(2);
+    expect(result.invalidRecords).toBe(1);
   });
 });
 

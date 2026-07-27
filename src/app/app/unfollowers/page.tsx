@@ -83,6 +83,21 @@ export default function UnfollowersPage() {
     );
   }
 
+  const hasIncompleteSnapshot = snapshots.some((s) => s.validity === "partial" || s.validity === "invalid");
+  if (events.length === 0 && hasIncompleteSnapshot) {
+    return (
+      <>
+        <PageHeader title="Recent Unfollowers" subtitle="Lost followers detected between your snapshots." />
+        <EmptyState
+          icon={<History size={20} />}
+          title="Not enough complete snapshots to compare yet."
+          description="One or more of your snapshots is incomplete, so Orbly can't reliably tell who stopped following you. Import a complete, all-time export to unlock this."
+          action={<ButtonLink href="/app/import">Import a Complete Export</ButtonLink>}
+        />
+      </>
+    );
+  }
+
   return (
     <>
       <PageHeader title="Recent Unfollowers" subtitle="Lost followers detected between your snapshots." count={filtered.length} />

@@ -1,3 +1,6 @@
+import type { DatasetValidity, ProfileReferenceCounts, ValidityReason } from "@/lib/instagram/validity";
+import type { DateRangeSource } from "@/lib/instagram/types";
+
 export interface SnapshotRecord {
   id: string;
   createdAt: string; // ISO timestamp — when this snapshot was created in Orbly
@@ -15,6 +18,15 @@ export interface SnapshotRecord {
   coverageToIso?: string | null;
   /** True when the source export was too narrow to be a true all-time export. */
   coverageLooksLimited?: boolean;
+  /** Whether the date range above is Meta's own explicit statement, or unknown/absent. Never inferred from relationship timestamps. */
+  dateRangeSource: DateRangeSource;
+  /** The parser build that produced this snapshot's numbers. Used to identify pre-fix imports for re-validation. */
+  parserVersion: number;
+  /** Whether this snapshot's followers/following can be trusted as a complete, authoritative current relationship graph. */
+  validity: DatasetValidity;
+  validityReasons: ValidityReason[];
+  /** Optional manually-entered counts from the user's live Instagram profile, used only to verify completeness — never to fabricate relationship data. */
+  profileReferenceCounts?: ProfileReferenceCounts | null;
 }
 
 export interface SnapshotFollowerRecord {
@@ -55,4 +67,4 @@ export interface SettingsRecord {
   reducedMotionOverride: "system" | "reduced" | "full";
 }
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;

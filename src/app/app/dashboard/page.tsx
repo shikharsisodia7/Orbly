@@ -1,11 +1,11 @@
 "use client";
 
 import { PageHeader } from "@/components/dashboard/PageHeader";
-import { RequireSnapshot } from "@/components/dashboard/RequireSnapshot";
+import { RequireUsableSnapshot } from "@/components/dashboard/RequireUsableSnapshot";
 import { RelationshipOverview } from "@/components/dashboard/RelationshipOverview";
-import { CoverageWarning } from "@/components/dashboard/CoverageWarning";
 import { HistoryChart } from "@/components/dashboard/HistoryChart";
 import { RecentChangesFeed } from "@/components/dashboard/RecentChangesFeed";
+import { ValidityBadge } from "@/components/ui/ValidityBadge";
 import { useCurrentRelationships, useSnapshotComparison } from "@/hooks/useRelationships";
 import { useSnapshots, usePreviousSnapshot } from "@/hooks/useSnapshots";
 import { formatFullDate } from "@/lib/utils/format";
@@ -24,11 +24,10 @@ function DashboardContent({ latest }: { latest: SnapshotRecord }) {
       <PageHeader
         title="Overview"
         subtitle={`Snapshot from ${formatFullDate(latest.createdAt)}${latest.label ? ` — ${latest.label}` : ""}`}
+        action={<ValidityBadge validity={latest.validity} />}
       />
 
       <div className="space-y-6">
-        <CoverageWarning snapshot={latest} />
-
         <RelationshipOverview
           followersCount={latest.followersCount}
           followingCount={latest.followingCount}
@@ -50,5 +49,5 @@ function DashboardContent({ latest }: { latest: SnapshotRecord }) {
 }
 
 export default function DashboardPage() {
-  return <RequireSnapshot>{(latest) => <DashboardContent latest={latest} />}</RequireSnapshot>;
+  return <RequireUsableSnapshot>{(latest) => <DashboardContent latest={latest} />}</RequireUsableSnapshot>;
 }

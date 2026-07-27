@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
+import { ValidityBadge } from "@/components/ui/ValidityBadge";
 import { formatFullDate, formatSignedDelta } from "@/lib/utils/format";
 import { deleteSnapshot, renameSnapshot } from "@/lib/db/queries";
 import type { SnapshotRecord } from "@/lib/db/schema";
@@ -61,9 +62,12 @@ export function SnapshotTimeline({ snapshots }: SnapshotTimelineProps) {
                     </button>
                   </div>
                 ) : (
-                  <p className="mt-1 text-base font-medium text-ink">
-                    {snapshot.label || (isFirst ? "First snapshot" : "Snapshot")}
-                  </p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <p className="text-base font-medium text-ink">
+                      {snapshot.label || (isFirst ? "First snapshot" : "Snapshot")}
+                    </p>
+                    <ValidityBadge validity={snapshot.validity} />
+                  </div>
                 )}
               </div>
 

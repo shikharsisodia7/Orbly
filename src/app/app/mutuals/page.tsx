@@ -1,7 +1,7 @@
 "use client";
 
 import { PageHeader } from "@/components/dashboard/PageHeader";
-import { RequireSnapshot } from "@/components/dashboard/RequireSnapshot";
+import { RequireUsableSnapshot } from "@/components/dashboard/RequireUsableSnapshot";
 import { ReadOnlyRelationshipList } from "@/components/dashboard/ReadOnlyRelationshipList";
 import { Badge } from "@/components/ui/Badge";
 import { useCurrentRelationships } from "@/hooks/useRelationships";
@@ -26,5 +26,5 @@ function MutualsContent({ snapshotId }: { snapshotId: string }) {
 }
 
 export default function MutualsPage() {
-  return <RequireSnapshot>{(latest) => <MutualsContent snapshotId={latest.id} />}</RequireSnapshot>;
+  return <RequireUsableSnapshot>{(latest) => <MutualsContent snapshotId={latest.id} />}</RequireUsableSnapshot>;
 }

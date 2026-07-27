@@ -176,8 +176,23 @@ const SECTIONS = [
         </li>
         <li>
           <strong>My follower count is way lower than Instagram shows</strong> — your export was
-          almost certainly date-limited rather than all-time. Check the warning on your dashboard,
-          then request a new export with the date range set to All time.
+          almost certainly date-limited rather than all-time. If Meta&apos;s own export file says so,
+          Orbly blocks the import outright with instructions to request a new All-time export
+          instead of letting you create a misleading snapshot from it.
+        </li>
+        <li>
+          <strong>&quot;This snapshot is incomplete&quot;</strong> — you&apos;ll see this instead of
+          your usual dashboard when a snapshot is marked <em>Partial</em> or <em>Invalid</em>.
+          Mutuals, doesn&apos;t-follow-back, and unfollower tracking are hidden until you import a
+          complete export — Orbly won&apos;t calculate those from data it can&apos;t trust. Every
+          snapshot on the Snapshots page shows a status badge (Complete, Unverified, Partial, or
+          Invalid) so you always know which imports are trustworthy.
+        </li>
+        <li>
+          <strong>Verify against Instagram</strong> — on the import confirmation screen, you can
+          optionally enter the follower/following counts shown on your live Instagram profile.
+          Orbly compares them to what it parsed and flags a significant shortfall. This never adds
+          or removes accounts — it&apos;s a completeness check only.
         </li>
         <li>
           <strong>Someone I already unfollowed still appears</strong> — your snapshot was taken

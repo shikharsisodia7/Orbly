@@ -103,3 +103,28 @@ export function classifyFile(
 export function looksLikeHtmlFile(fileName: string): boolean {
   return /\.html?$/i.test(fileName);
 }
+
+/**
+ * Sorts file paths so numbered chunks read in numeric order (followers_2
+ * before followers_10) instead of lexical order. Only affects diagnostics
+ * ordering and duplicate tie-breaking — never which usernames are unique.
+ */
+export function naturalFileSort(a: string, b: string): number {
+  const chunk = /(\d+)|(\D+)/g;
+  const aParts = a.match(chunk) ?? [];
+  const bParts = b.match(chunk) ?? [];
+  const len = Math.max(aParts.length, bParts.length);
+
+  for (let i = 0; i < len; i++) {
+    const aPart = aParts[i] ?? "";
+    const bPart = bParts[i] ?? "";
+    const aNum = Number(aPart);
+    const bNum = Number(bPart);
+    if (!Number.isNaN(aNum) && !Number.isNaN(bNum) && aPart !== "" && bPart !== "") {
+      if (aNum !== bNum) return aNum - bNum;
+    } else if (aPart !== bPart) {
+      return aPart < bPart ? -1 : 1;
+    }
+  }
+  return 0;
+}

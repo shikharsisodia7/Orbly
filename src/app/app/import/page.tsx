@@ -9,12 +9,14 @@ import { ExportWizard } from "@/components/import/ExportWizard";
 import { Dropzone } from "@/components/import/Dropzone";
 import { ProcessingStages, type ProcessingStageId } from "@/components/import/ProcessingStages";
 import { ImportDiagnosticsError } from "@/components/import/ImportDiagnosticsError";
+import { PartialExportScreen } from "@/components/import/PartialExportScreen";
 import { ConfirmationSummary } from "@/components/import/ConfirmationSummary";
 import { DuplicateDialog } from "@/components/import/DuplicateDialog";
 import { FirstSnapshotExplainer } from "@/components/import/FirstSnapshotExplainer";
 import { parseInstagramExport } from "@/lib/instagram/parser";
 import { hashDataset } from "@/lib/instagram/hash";
 import type { ParsedExport } from "@/lib/instagram/types";
+import type { ProfileReferenceCounts } from "@/lib/instagram/validity";
 import {
   createSnapshot,
   findSnapshotByDatasetHash,
@@ -31,6 +33,7 @@ type FlowState =
   | "upload"
   | "processing"
   | "diagnostics-error"
+  | "partial-export"
   | "confirmation"
   | "first-snapshot-explainer";
 
@@ -101,6 +104,14 @@ export default function ImportPage() {
       setParsed(result);
       setProcessingStage("complete");
 
+      // A date-limited export is provably incomplete (Meta's own export header
+      // says so) — block it from ever becoming a normal current snapshot,
+      // rather than warning and letting misleading analytics through.
+      if (result.diagnostics.coverage?.looksLimited) {
+        setFlow("partial-export");
+        return;
+      }
+
       const existing = await findSnapshotByDatasetHash(hash);
       setFlow("confirmation");
       if (existing) setDuplicateOpen(true);
@@ -112,7 +123,7 @@ export default function ImportPage() {
     }
   }
 
-  async function handleConfirmCreate() {
+  async function handleConfirmCreate(profileReference: ProfileReferenceCounts | null) {
     if (!parsed || !datasetHash) return;
     setCreating(true);
     const isFirst = (snapshots?.length ?? 0) === 0;
@@ -122,6 +133,7 @@ export default function ImportPage() {
       datasetHash,
       originalFileName: selectedFileName,
       coverage: parsed.diagnostics.coverage,
+      profileReference,
     });
     // Close out queue items for accounts that are no longer in the following
     // list — already unfollowed, or the account no longer exists.
@@ -175,6 +187,14 @@ export default function ImportPage() {
           diagnostics={parsed?.diagnostics}
           onShowInstructions={() => setFlow("wizard")}
           onTryAgain={resetToUpload}
+        />
+      )}
+
+      {flow === "partial-export" && parsed && (
+        <PartialExportScreen
+          parsed={parsed}
+          onShowInstructions={() => setFlow("wizard")}
+          onChooseAnother={resetToUpload}
         />
       )}
 

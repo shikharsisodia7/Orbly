@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
-import { RequireSnapshot } from "@/components/dashboard/RequireSnapshot";
+import { RequireUsableSnapshot } from "@/components/dashboard/RequireUsableSnapshot";
 import { SelectableRelationshipList } from "@/components/dashboard/SelectableRelationshipList";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Heart } from "lucide-react";
@@ -57,5 +57,5 @@ function NonfollowersContent({ snapshotId }: { snapshotId: string }) {
 }
 
 export default function NonfollowersPage() {
-  return <RequireSnapshot>{(latest) => <NonfollowersContent snapshotId={latest.id} />}</RequireSnapshot>;
+  return <RequireUsableSnapshot>{(latest) => <NonfollowersContent snapshotId={latest.id} />}</RequireUsableSnapshot>;
 }

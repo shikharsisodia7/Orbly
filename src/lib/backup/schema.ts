@@ -1,5 +1,16 @@
 import { z } from "zod";
 
+const validityReasonSchema = z.enum([
+  "DATE_RANGE_NOT_ALL_TIME",
+  "FOLLOWERS_MISSING",
+  "FOLLOWING_MISSING",
+  "PARSER_FAILURE",
+  "FOLLOWER_COUNT_MISMATCH",
+  "FOLLOWING_COUNT_MISMATCH",
+  "UNKNOWN_EXPORT_RANGE",
+  "DUPLICATE_IMPORT",
+]);
+
 export const backupSnapshotSchema = z.object({
   id: z.string(),
   createdAt: z.string(),
@@ -12,6 +23,16 @@ export const backupSnapshotSchema = z.object({
   coverageFromIso: z.string().nullable().optional(),
   coverageToIso: z.string().nullable().optional(),
   coverageLooksLimited: z.boolean().optional(),
+  // Optional so backups made before validity tracking existed still restore —
+  // normalizeSnapshotRecord() backfills these on the way back in.
+  dateRangeSource: z.enum(["meta-explicit", "unknown"]).optional(),
+  parserVersion: z.number().optional(),
+  validity: z.enum(["complete", "partial", "unverified", "invalid"]).optional(),
+  validityReasons: z.array(validityReasonSchema).optional(),
+  profileReferenceCounts: z
+    .object({ followers: z.number(), following: z.number(), recordedAt: z.string() })
+    .nullable()
+    .optional(),
 });
 
 export const backupRelationshipSchema = z.object({

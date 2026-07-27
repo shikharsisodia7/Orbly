@@ -27,14 +27,28 @@ export function useLostFollowerEvents(): LostFollowerEvent[] | undefined {
     );
     if (snapshots.length < 2) return [];
 
-    const latest = snapshots[snapshots.length - 1];
-    const latestFollowing = await db.snapshotFollowing.where("snapshotId").equals(latest.id).toArray();
-    const latestFollowingSet = new Set(latestFollowing.map((r) => r.normalizedUsername));
+    const isUsable = (s: SnapshotRecord) => s.validity !== "partial" && s.validity !== "invalid";
+    // "Still following them" is a secondary signal read from the most recent
+    // USABLE snapshot — a partial/invalid latest snapshot can't be trusted to
+    // say who is or isn't currently followed.
+    const newestUsable = [...snapshots].reverse().find(isUsable);
+    const latestFollowingSet = newestUsable
+      ? new Set(
+          (await db.snapshotFollowing.where("snapshotId").equals(newestUsable.id).toArray()).map(
+            (r) => r.normalizedUsername
+          )
+        )
+      : new Set<string>();
 
     const events: LostFollowerEvent[] = [];
     for (let i = 0; i < snapshots.length - 1; i++) {
       const from = snapshots[i];
       const to = snapshots[i + 1];
+      // A partial/invalid snapshot on either side of the pair means we can't
+      // tell whether an apparent "lost follower" is real or just an artifact
+      // of an incomplete export — so that pair is skipped entirely rather
+      // than reporting a misleading change.
+      if (!isUsable(from) || !isUsable(to)) continue;
       const [fromFollowers, toFollowers] = await Promise.all([
         db.snapshotFollowers.where("snapshotId").equals(from.id).toArray(),
         db.snapshotFollowers.where("snapshotId").equals(to.id).toArray(),

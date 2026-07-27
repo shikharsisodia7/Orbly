@@ -9,6 +9,8 @@ import type {
   SnapshotRecord,
 } from "./schema";
 import type { ExportCoverage, Relationship } from "@/lib/instagram/types";
+import { PARSER_VERSION } from "@/lib/instagram/parser";
+import { assessDatasetValidity, type ProfileReferenceCounts } from "@/lib/instagram/validity";
 
 function newId(): string {
   return crypto.randomUUID();
@@ -21,11 +23,21 @@ export interface CreateSnapshotInput {
   originalFileName: string | null;
   label?: string;
   coverage?: ExportCoverage | null;
+  /** Manually-entered counts from the user's live Instagram profile, used only to verify completeness. */
+  profileReference?: ProfileReferenceCounts | null;
 }
 
 export async function createSnapshot(input: CreateSnapshotInput): Promise<SnapshotRecord> {
   const db = getDb();
   const now = new Date().toISOString();
+
+  const { validity, reasons } = assessDatasetValidity({
+    followerCount: input.followers.length,
+    followingCount: input.following.length,
+    coverage: input.coverage ?? null,
+    profileReference: input.profileReference ?? null,
+  });
+
   const snapshot: SnapshotRecord = {
     id: newId(),
     createdAt: now,
@@ -38,6 +50,11 @@ export async function createSnapshot(input: CreateSnapshotInput): Promise<Snapsh
     coverageFromIso: input.coverage?.fromIso ?? null,
     coverageToIso: input.coverage?.toIso ?? null,
     coverageLooksLimited: input.coverage?.looksLimited ?? false,
+    dateRangeSource: input.coverage ? "meta-explicit" : "unknown",
+    parserVersion: PARSER_VERSION,
+    validity,
+    validityReasons: reasons,
+    profileReferenceCounts: input.profileReference ?? null,
   };
 
   const followerRecords: SnapshotFollowerRecord[] = input.followers.map((rel) => ({

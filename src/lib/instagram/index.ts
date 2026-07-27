@@ -2,6 +2,8 @@ export * from "./types";
 export * from "./normalize";
 export * from "./detect-files";
 export * from "./html-extract";
+export * from "./record-extract";
 export * from "./parser";
 export * from "./comparisons";
 export * from "./hash";
+export * from "./validity";

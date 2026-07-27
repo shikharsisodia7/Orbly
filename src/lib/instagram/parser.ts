@@ -1,13 +1,22 @@
 import JSZip from "jszip";
-import {
-  buildProfileUrl,
-  isPlausibleUsername,
-  normalizeUsername,
-  usernameFromProfileUrl,
-} from "./normalize";
-import { classifyFile, looksLikeHtmlFile } from "./detect-files";
+import { classifyFile, looksLikeHtmlFile, naturalFileSort } from "./detect-files";
 import { extractCoverageFromHtml, extractRelationshipsFromHtml } from "./html-extract";
-import type { ParsedExport, ParseDiagnostics, Relationship } from "./types";
+import { extractRelationshipsFromJson } from "./record-extract";
+import type {
+  ConflictingRecord,
+  FileParseDiagnostic,
+  ParsedExport,
+  ParseDiagnostics,
+  Relationship,
+} from "./types";
+
+/**
+ * Bumped whenever parsing/extraction logic changes in a way that could change
+ * results for an already-imported export. Snapshots store the version they
+ * were created with so old, pre-fix imports can be identified and
+ * re-validated rather than trusted at face value.
+ */
+export const PARSER_VERSION = 2;
 
 export const MAX_ZIP_SIZE_BYTES = 2 * 1024 * 1024 * 1024; // 2GB safety ceiling
 
@@ -17,88 +26,7 @@ function getByteLength(file: File | Blob | ArrayBuffer): number | null {
   return null;
 }
 
-interface RawEntry {
-  href?: unknown;
-  value?: unknown;
-  timestamp?: unknown;
-}
-
-function isRawEntry(value: unknown): value is RawEntry {
-  return typeof value === "object" && value !== null;
-}
-
-function relationshipFromEntry(entry: RawEntry): Relationship | null {
-  let normalizedUsername: string | null = null;
-  let displayUsername: string | null = null;
-
-  if (typeof entry.value === "string" && entry.value.trim().length > 0) {
-    const normalized = normalizeUsername(entry.value);
-    if (isPlausibleUsername(normalized)) {
-      normalizedUsername = normalized;
-      displayUsername = entry.value.trim().replace(/^@+/, "");
-    }
-  }
-
-  if (!normalizedUsername && typeof entry.href === "string") {
-    const derived = usernameFromProfileUrl(entry.href);
-    if (derived) {
-      normalizedUsername = derived;
-      displayUsername = derived;
-    }
-  }
-
-  if (!normalizedUsername) return null;
-
-  const profileUrl =
-    typeof entry.href === "string" && /instagram\.com/i.test(entry.href)
-      ? entry.href
-      : buildProfileUrl(normalizedUsername);
-
-  const timestamp = typeof entry.timestamp === "number" ? entry.timestamp : null;
-
-  return {
-    normalizedUsername,
-    displayUsername: displayUsername ?? normalizedUsername,
-    profileUrl,
-    timestamp,
-  };
-}
-
-/**
- * Recursively walks an arbitrarily-shaped Instagram export JSON document
- * looking for `string_list_data` arrays, which is where Meta stores the
- * actual username/href/timestamp records regardless of how the surrounding
- * structure is wrapped (relationships_following, plain array, etc).
- */
-export function extractRelationships(node: unknown, depth = 0): Relationship[] {
-  const out: Relationship[] = [];
-  if (depth > 8 || node == null) return out;
-
-  if (Array.isArray(node)) {
-    for (const item of node) out.push(...extractRelationships(item, depth + 1));
-    return out;
-  }
-
-  if (typeof node === "object") {
-    const obj = node as Record<string, unknown>;
-    if (Array.isArray(obj.string_list_data)) {
-      for (const rawEntry of obj.string_list_data) {
-        if (isRawEntry(rawEntry)) {
-          const rel = relationshipFromEntry(rawEntry);
-          if (rel) out.push(rel);
-        }
-      }
-      return out;
-    }
-    for (const value of Object.values(obj)) {
-      out.push(...extractRelationships(value, depth + 1));
-    }
-  }
-
-  return out;
-}
-
-function dedupe(relationships: Relationship[]): Relationship[] {
+function dedupe(relationships: Relationship[]): { unique: Relationship[]; duplicates: number } {
   const map = new Map<string, Relationship>();
   for (const rel of relationships) {
     const existing = map.get(rel.normalizedUsername);
@@ -108,7 +36,7 @@ function dedupe(relationships: Relationship[]): Relationship[] {
       map.set(rel.normalizedUsername, rel);
     }
   }
-  return Array.from(map.values());
+  return { unique: Array.from(map.values()), duplicates: relationships.length - map.size };
 }
 
 export interface ParseOptions {
@@ -141,7 +69,9 @@ export async function parseInstagramExport(
   onStage?.("opening-zip");
 
   const zip = await JSZip.loadAsync(file);
-  const entries = Object.values(zip.files).filter((f) => !f.dir);
+  const entries = Object.values(zip.files)
+    .filter((f) => !f.dir)
+    .sort((a, b) => naturalFileSort(a.name, b.name));
 
   onStage?.("scanning-files");
 
@@ -153,13 +83,30 @@ export async function parseInstagramExport(
 
   const followerRelationships: Relationship[] = [];
   const followingRelationships: Relationship[] = [];
+  const followerFileDetails: FileParseDiagnostic[] = [];
+  const followingFileDetails: FileParseDiagnostic[] = [];
+  const conflictingRecords: ConflictingRecord[] = [];
+
   const diagnostics: ParseDiagnostics = {
     followerFilesUsed: [],
     followingFilesUsed: [],
+    followerFileDetails,
+    followingFileDetails,
     ignoredFiles: [],
     ignoredFileCount: 0,
     warnings: [],
     coverage: null,
+    followerRawRecords: 0,
+    followerParsedRecords: 0,
+    followerUniqueUsers: 0,
+    followerDuplicates: 0,
+    followerInvalidRecords: 0,
+    followingRawRecords: 0,
+    followingParsedRecords: 0,
+    followingUniqueUsers: 0,
+    followingDuplicates: 0,
+    followingInvalidRecords: 0,
+    conflictingRecords,
   };
 
   onStage?.("finding-followers");
@@ -177,12 +124,17 @@ export async function parseInstagramExport(
     }
 
     let relationships: Relationship[] = [];
+    let rawRecords = 0;
+    let invalidRecords = 0;
     let classification: ReturnType<typeof classifyFile>["classification"];
 
     if (isHtml) {
       classification = classifyFile(fileName, undefined).classification;
       if (classification === "followers" || classification === "following") {
-        relationships = extractRelationshipsFromHtml(raw);
+        const result = extractRelationshipsFromHtml(raw);
+        relationships = result.relationships;
+        rawRecords = result.rawRecords;
+        invalidRecords = result.invalidRecords;
         diagnostics.coverage ??= extractCoverageFromHtml(raw);
       }
     } else {
@@ -196,16 +148,36 @@ export async function parseInstagramExport(
       }
       classification = classifyFile(fileName, json).classification;
       if (classification === "followers" || classification === "following") {
-        relationships = extractRelationships(json);
+        const result = extractRelationshipsFromJson(json, fileName);
+        relationships = result.relationships;
+        rawRecords = result.rawRecords;
+        invalidRecords = result.invalidRecords;
+        conflictingRecords.push(...result.conflicts);
       }
     }
 
     if (classification === "followers") {
       followerRelationships.push(...relationships);
       diagnostics.followerFilesUsed.push(fileName);
+      followerFileDetails.push({
+        fileName,
+        rawRecords,
+        parsedRecords: relationships.length,
+        invalidRecords,
+      });
+      diagnostics.followerRawRecords += rawRecords;
+      diagnostics.followerInvalidRecords += invalidRecords;
     } else if (classification === "following") {
       followingRelationships.push(...relationships);
       diagnostics.followingFilesUsed.push(fileName);
+      followingFileDetails.push({
+        fileName,
+        rawRecords,
+        parsedRecords: relationships.length,
+        invalidRecords,
+      });
+      diagnostics.followingRawRecords += rawRecords;
+      diagnostics.followingInvalidRecords += invalidRecords;
     } else {
       diagnostics.ignoredFiles.push(fileName);
       diagnostics.ignoredFileCount++;
@@ -216,8 +188,16 @@ export async function parseInstagramExport(
   onStage?.("normalizing");
   onStage?.("deduplicating");
 
-  const followers = dedupe(followerRelationships);
-  const following = dedupe(followingRelationships);
+  diagnostics.followerParsedRecords = followerRelationships.length;
+  diagnostics.followingParsedRecords = followingRelationships.length;
+
+  const { unique: followers, duplicates: followerDuplicates } = dedupe(followerRelationships);
+  const { unique: following, duplicates: followingDuplicates } = dedupe(followingRelationships);
+
+  diagnostics.followerUniqueUsers = followers.length;
+  diagnostics.followerDuplicates = followerDuplicates;
+  diagnostics.followingUniqueUsers = following.length;
+  diagnostics.followingDuplicates = followingDuplicates;
 
   onStage?.("done");
 

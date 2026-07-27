@@ -1,5 +1,6 @@
 import { getDb } from "@/lib/db";
 import { SCHEMA_VERSION } from "@/lib/db/schema";
+import { normalizeSnapshotRecord } from "@/lib/db/migrate";
 import { backupFileSchema, type BackupFile } from "./schema";
 
 export async function buildBackup(): Promise<BackupFile> {
@@ -73,7 +74,7 @@ export async function restoreBackup(backup: BackupFile): Promise<void> {
       await db.queueItems.clear();
       await db.settings.clear();
 
-      await db.snapshots.bulkAdd(backup.snapshots);
+      await db.snapshots.bulkAdd(backup.snapshots.map(normalizeSnapshotRecord));
       await db.snapshotFollowers.bulkAdd(backup.snapshotFollowers);
       await db.snapshotFollowing.bulkAdd(backup.snapshotFollowing);
       await db.queueItems.bulkAdd(backup.queueItems);

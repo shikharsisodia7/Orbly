@@ -1,17 +1,24 @@
-import { AlertTriangle } from "lucide-react";
+"use client";
+
+import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { formatCount, formatFullDate } from "@/lib/utils/format";
+import { formatCount } from "@/lib/utils/format";
 import type { ParsedExport } from "@/lib/instagram/types";
 import { computeCurrentRelationships } from "@/lib/instagram/comparisons";
+import { verifyCount, type ProfileReferenceCounts } from "@/lib/instagram/validity";
+import { ImportDiagnosticsPanel } from "./ImportDiagnosticsPanel";
+import { ProfileCountVerification } from "./ProfileCountVerification";
 
 interface ConfirmationSummaryProps {
   parsed: ParsedExport;
-  onConfirm: () => void;
+  onConfirm: (profileReference: ProfileReferenceCounts | null) => void;
   onCancel: () => void;
   creating: boolean;
 }
 
 export function ConfirmationSummary({ parsed, onConfirm, onCancel, creating }: ConfirmationSummaryProps) {
+  const [profileReference, setProfileReference] = useState<ProfileReferenceCounts | null>(null);
+
   const { mutuals, doesNotFollowBack, youDontFollowBack } = computeCurrentRelationships(
     parsed.followers,
     parsed.following
@@ -25,32 +32,14 @@ export function ConfirmationSummary({ parsed, onConfirm, onCancel, creating }: C
     { label: "You Don't Follow Back", value: youDontFollowBack.length },
   ];
 
-  const coverage = parsed.diagnostics.coverage;
+  const hasMismatch =
+    profileReference != null &&
+    (verifyCount(parsed.followers.length, profileReference.followers).isMismatch ||
+      verifyCount(parsed.following.length, profileReference.following).isMismatch);
 
   return (
     <div className="mx-auto w-full max-w-md rounded-2xl border border-border bg-white p-7">
       <p className="text-sm font-semibold text-ink">Instagram export found</p>
-
-      {coverage?.looksLimited && (
-        <div className="mt-4 flex gap-3 rounded-xl border border-orange/30 bg-orange-soft/50 p-4">
-          <AlertTriangle size={17} className="mt-0.5 shrink-0 text-orange" />
-          <div className="text-xs leading-relaxed text-ink-soft">
-            <p className="font-semibold text-ink">This export doesn&apos;t cover all time.</p>
-            <p className="mt-1">
-              Meta says this file only covers{" "}
-              <strong>
-                {formatFullDate(coverage.fromIso)} – {formatFullDate(coverage.toIso)}
-              </strong>{" "}
-              (about {Math.round(coverage.spanDays / 30)} months), so followers from before that
-              window are missing and these counts will be lower than your real totals.
-            </p>
-            <p className="mt-1.5">
-              To fix this, request a new export and set the date range to{" "}
-              <strong>All time</strong> before submitting.
-            </p>
-          </div>
-        </div>
-      )}
 
       <div className="mt-5 grid grid-cols-2 gap-4">
         {rows.map((row) => (
@@ -69,9 +58,25 @@ export function ConfirmationSummary({ parsed, onConfirm, onCancel, creating }: C
         )}
       </div>
 
+      <ProfileCountVerification
+        exportFollowers={parsed.followers.length}
+        exportFollowing={parsed.following.length}
+        onChange={setProfileReference}
+      />
+
+      <ImportDiagnosticsPanel diagnostics={parsed.diagnostics} />
+
+      {hasMismatch && (
+        <p className="mt-4 text-xs leading-relaxed text-ink-soft">
+          Because of the mismatch above, this snapshot will be marked <strong>partial</strong> and
+          won&apos;t be used for mutuals, doesn&apos;t-follow-back, or unfollower tracking until you
+          import a complete export.
+        </p>
+      )}
+
       <div className="mt-6 flex flex-col gap-2">
-        <Button onClick={onConfirm} disabled={creating}>
-          {creating ? "Saving locally…" : "Create Snapshot"}
+        <Button onClick={() => onConfirm(profileReference)} disabled={creating}>
+          {creating ? "Saving locally…" : hasMismatch ? "Create Snapshot Anyway" : "Create Snapshot"}
         </Button>
         <Button onClick={onCancel} variant="ghost" disabled={creating}>
           Cancel

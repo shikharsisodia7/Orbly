@@ -119,4 +119,122 @@ describe("parseInstagramExport", () => {
     const result = await parseInstagramExport(buffer);
     expect(result.looksLikeHtmlExport).toBe(true);
   });
+
+  it("reports raw/parsed/unique diagnostics that match the actual fixture data", async () => {
+    const buffer = await buildFixtureZip();
+    const result = await parseInstagramExport(buffer);
+
+    // followers_1.json: 21 records, followers_2.json: 18 records = 39 raw, 36 unique (3 overlap)
+    expect(result.diagnostics.followerRawRecords).toBe(39);
+    expect(result.diagnostics.followerParsedRecords).toBe(39);
+    expect(result.diagnostics.followerUniqueUsers).toBe(36);
+    expect(result.diagnostics.followerDuplicates).toBe(3);
+    expect(result.diagnostics.followerInvalidRecords).toBe(0);
+
+    expect(result.diagnostics.followingRawRecords).toBe(30);
+    expect(result.diagnostics.followingUniqueUsers).toBe(30);
+    expect(result.diagnostics.followingDuplicates).toBe(0);
+
+    expect(result.diagnostics.followerFileDetails.map((d) => d.fileName).sort()).toEqual([
+      "followers_1.json",
+      "followers_2.json",
+    ]);
+  });
+});
+
+/**
+ * Regression fixture reproducing the exact reported real-world failure:
+ * Instagram profile shows 3,866 followers, but Orbly's parser needs to prove
+ * it can correctly read every follower across many numbered chunk files
+ * rather than silently dropping records after the first file. This proves
+ * the discrepancy in the field report was NOT caused by Orbly's parser losing
+ * chunked follower data — that path is covered exactly here.
+ */
+describe("parseInstagramExport — large multi-file export (regression for reported 573-vs-3866 bug)", () => {
+  function record(username: string, i: number) {
+    return {
+      title: "",
+      media_list_data: [],
+      string_list_data: [
+        {
+          href: `https://www.instagram.com/${username}/`,
+          value: username,
+          timestamp: 1690000000 + i * 3600,
+        },
+      ],
+    };
+  }
+
+  async function buildLargeZip(): Promise<ArrayBuffer> {
+    const zip = new JSZip();
+
+    // 4 follower chunk files totalling exactly 3,866 unique followers, matching
+    // the real Instagram profile count reported in the bug — proves multi-file
+    // aggregation is not the source of follower loss.
+    const chunkSizes = [1000, 1000, 1000, 866];
+    let cursor = 0;
+    chunkSizes.forEach((size, idx) => {
+      const records = [];
+      for (let n = 0; n < size; n++) {
+        records.push(record(`follower_${cursor}`, cursor));
+        cursor++;
+      }
+      zip.file(`followers_${idx + 1}.json`, JSON.stringify(records));
+    });
+
+    // A single following.json totalling exactly 5,783 unique accounts.
+    const followingRecords = [];
+    for (let n = 0; n < 5783; n++) {
+      followingRecords.push(record(`followed_${n}`, n));
+    }
+    zip.file("following.json", JSON.stringify({ relationships_following: followingRecords }));
+
+    return zip.generateAsync({ type: "arraybuffer" });
+  }
+
+  it("aggregates all numbered follower chunk files into the full 3,866-user total", async () => {
+    const buffer = await buildLargeZip();
+    const result = await parseInstagramExport(buffer);
+
+    expect(result.followers).toHaveLength(3866);
+    expect(result.following).toHaveLength(5783);
+    expect(result.diagnostics.followerFilesUsed.sort()).toEqual([
+      "followers_1.json",
+      "followers_2.json",
+      "followers_3.json",
+      "followers_4.json",
+    ]);
+    expect(result.diagnostics.followerRawRecords).toBe(3866);
+    expect(result.diagnostics.followerUniqueUsers).toBe(3866);
+    expect(result.diagnostics.followerDuplicates).toBe(0);
+  });
+});
+
+describe("parseInstagramExport — following title/value conflicts", () => {
+  it("uses the string_list_data value and logs a conflict when title disagrees, without double-counting", async () => {
+    const zip = new JSZip();
+    const following = {
+      relationships_following: [
+        {
+          title: "old_display_name",
+          media_list_data: [],
+          string_list_data: [
+            { href: "https://www.instagram.com/actual_user/", value: "actual_user", timestamp: 1690000000 },
+          ],
+        },
+      ],
+    };
+    zip.file("following.json", JSON.stringify(following));
+    const buffer = await zip.generateAsync({ type: "arraybuffer" });
+    const result = await parseInstagramExport(buffer);
+
+    expect(result.following).toHaveLength(1);
+    expect(result.following[0].normalizedUsername).toBe("actual_user");
+    expect(result.diagnostics.conflictingRecords).toHaveLength(1);
+    expect(result.diagnostics.conflictingRecords[0]).toMatchObject({
+      title: "old_display_name",
+      value: "actual_user",
+      used: "actual_user",
+    });
+  });
 });

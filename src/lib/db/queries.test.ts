@@ -47,6 +47,49 @@ describe("createSnapshot", () => {
     expect(following).toHaveLength(1);
   });
 
+  it("marks a snapshot unverified by default when there's no coverage or profile check", async () => {
+    const snapshot = await createSnapshot({
+      followers: [rel("alice"), rel("bob")],
+      following: [rel("alice")],
+      datasetHash: "hash-unverified",
+      originalFileName: "export.zip",
+    });
+    expect(snapshot.validity).toBe("unverified");
+    expect(snapshot.dateRangeSource).toBe("unknown");
+    expect(snapshot.parserVersion).toBeGreaterThanOrEqual(2);
+  });
+
+  it("marks a snapshot partial when Meta's own coverage header shows a limited window — the reported bug", async () => {
+    const snapshot = await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob")],
+      datasetHash: "hash-partial",
+      originalFileName: "export.zip",
+      coverage: {
+        fromIso: "2025-07-25T00:00:00.000Z",
+        toIso: "2026-07-25T00:00:00.000Z",
+        spanDays: 365,
+        looksLimited: true,
+        source: "meta-explicit",
+      },
+    });
+    expect(snapshot.validity).toBe("partial");
+    expect(snapshot.validityReasons).toContain("DATE_RANGE_NOT_ALL_TIME");
+    expect(snapshot.dateRangeSource).toBe("meta-explicit");
+  });
+
+  it("marks a snapshot complete when a manually-entered profile count matches", async () => {
+    const snapshot = await createSnapshot({
+      followers: [rel("alice"), rel("bob")],
+      following: [rel("alice")],
+      datasetHash: "hash-complete",
+      originalFileName: "export.zip",
+      profileReference: { followers: 2, following: 1, recordedAt: new Date().toISOString() },
+    });
+    expect(snapshot.validity).toBe("complete");
+    expect(snapshot.profileReferenceCounts?.followers).toBe(2);
+  });
+
   it("can be found again by its dataset hash", async () => {
     const snapshot = await createSnapshot({
       followers: [rel("alice")],
