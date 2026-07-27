@@ -4,6 +4,8 @@ export interface WizardStage {
   title: string;
   body: string;
   substeps: string[];
+  /** Optional emphasised note rendered below the steps. */
+  callout?: string;
   action?: { label: string; href: string };
 }
 
@@ -38,9 +40,11 @@ export const WIZARD_STAGES: WizardStage[] = [
     body: "These three settings make sure Orbly can read your export automatically.",
     substeps: [
       "Destination: Download to device.",
-      "Date range: All time — this ensures your full follower history is included.",
+      "Date range: All time — check this one carefully. Meta often pre-selects the last year instead, and that silently leaves out most of your followers.",
       "Format: JSON — lets Orbly automatically read your follower relationships.",
     ],
+    callout:
+      "If you only change one thing on this screen, make it the date range. A date-limited export is the most common cause of follower counts that look wrong.",
   },
   {
     id: "download",

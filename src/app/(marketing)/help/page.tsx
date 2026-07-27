@@ -65,11 +65,22 @@ const SECTIONS = [
     id: "why-all-time",
     title: "Why All time?",
     body: (
-      <p>
-        Choosing a shorter date range can leave out followers or accounts you followed a long time
-        ago, which would make your first snapshot incomplete. All time guarantees Orbly sees your
-        full current follower and following lists.
-      </p>
+      <>
+        <p>
+          Choosing a shorter date range leaves out followers and accounts you followed before that
+          window, which makes your snapshot incomplete.
+        </p>
+        <p>
+          This is the single most common reason Orbly&apos;s numbers look wrong. Meta sometimes
+          defaults the date range to the last year, and an export like that will show far fewer
+          followers than your profile does — while still showing your full following list, which
+          makes &quot;doesn&apos;t follow you back&quot; look absurdly high.
+        </p>
+        <p>
+          Orbly reads the date window Meta stamps inside the export and warns you at import time if
+          it isn&apos;t a true all-time export, so you&apos;ll know before you trust the numbers.
+        </p>
+      </>
     ),
   },
   {
@@ -162,6 +173,22 @@ const SECTIONS = [
         <li>
           <strong>Duplicate snapshot warning</strong> — Orbly detected that this export contains the
           exact same follower/following data as an existing snapshot.
+        </li>
+        <li>
+          <strong>My follower count is way lower than Instagram shows</strong> — your export was
+          almost certainly date-limited rather than all-time. Check the warning on your dashboard,
+          then request a new export with the date range set to All time.
+        </li>
+        <li>
+          <strong>Someone I already unfollowed still appears</strong> — your snapshot was taken
+          before you unfollowed them. Mark them Done in the queue and they&apos;re hidden right
+          away; they drop out permanently after your next import.
+        </li>
+        <li>
+          <strong>Accounts in my queue no longer exist</strong> — when you import a new export,
+          Orbly automatically closes out any queued account that&apos;s no longer in your following
+          list, whether you unfollowed them or their account was deleted. Use{" "}
+          <em>Clear resolved</em> on the queue page to remove them entirely.
         </li>
       </ul>
     ),

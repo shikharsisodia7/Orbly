@@ -1,5 +1,38 @@
 import { buildProfileUrl, isPlausibleUsername, normalizeUsername, usernameFromProfileUrl } from "./normalize";
-import type { Relationship } from "./types";
+import type { ExportCoverage, Relationship } from "./types";
+
+/**
+ * A genuine "All time" export spans from account creation to today. Anything
+ * covering less than roughly two years is almost certainly a windowed export,
+ * which means the follower list in it is incomplete.
+ */
+const ALL_TIME_MIN_SPAN_DAYS = 730;
+
+const COVERAGE_MARKER =
+  /Contains data you requested from\s*<time datetime="([^"]+)"[^>]*>[^<]*<\/time>\s*to\s*<time datetime="([^"]+)"/i;
+
+/**
+ * Reads the date window Meta stamps into the export's own header. Returns null
+ * when the header isn't present (older exports, or JSON-format exports which
+ * don't carry it).
+ */
+export function extractCoverageFromHtml(html: string): ExportCoverage | null {
+  const match = html.match(COVERAGE_MARKER);
+  if (!match) return null;
+
+  const fromMs = Date.parse(match[1]);
+  const toMs = Date.parse(match[2]);
+  if (Number.isNaN(fromMs) || Number.isNaN(toMs) || toMs <= fromMs) return null;
+
+  const spanDays = Math.round((toMs - fromMs) / (1000 * 60 * 60 * 24));
+
+  return {
+    fromIso: new Date(fromMs).toISOString(),
+    toIso: new Date(toMs).toISOString(),
+    spanDays,
+    looksLimited: spanDays < ALL_TIME_MIN_SPAN_DAYS,
+  };
+}
 
 /**
  * Meta's legacy HTML export renders each follower/following record as a

@@ -7,6 +7,14 @@ export interface SnapshotRecord {
   followingCount: number;
   datasetHash: string;
   originalFileName: string | null;
+  /**
+   * The date window Meta said the source export covered. Absent on snapshots
+   * imported from formats that don't declare one (e.g. JSON exports).
+   */
+  coverageFromIso?: string | null;
+  coverageToIso?: string | null;
+  /** True when the source export was too narrow to be a true all-time export. */
+  coverageLooksLimited?: boolean;
 }
 
 export interface SnapshotFollowerRecord {

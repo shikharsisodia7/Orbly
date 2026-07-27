@@ -3,6 +3,7 @@
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { RequireSnapshot } from "@/components/dashboard/RequireSnapshot";
 import { RelationshipOverview } from "@/components/dashboard/RelationshipOverview";
+import { CoverageWarning } from "@/components/dashboard/CoverageWarning";
 import { HistoryChart } from "@/components/dashboard/HistoryChart";
 import { RecentChangesFeed } from "@/components/dashboard/RecentChangesFeed";
 import { useCurrentRelationships, useSnapshotComparison } from "@/hooks/useRelationships";
@@ -26,6 +27,8 @@ function DashboardContent({ latest }: { latest: SnapshotRecord }) {
       />
 
       <div className="space-y-6">
+        <CoverageWarning snapshot={latest} />
+
         <RelationshipOverview
           followersCount={latest.followersCount}
           followingCount={latest.followingCount}

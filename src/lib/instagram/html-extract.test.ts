@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractRelationshipsFromHtml } from "./html-extract";
+import { extractCoverageFromHtml, extractRelationshipsFromHtml } from "./html-extract";
 
 // Modeled on Meta's legacy HTML export markup shape (synthetic usernames only).
 const FOLLOWERS_HTML = `
@@ -42,5 +42,33 @@ describe("extractRelationshipsFromHtml", () => {
     const malformed = `<div class="pam uiBoxWhite noborder"><p>no anchor or h2 here</p></div>`;
     expect(() => extractRelationshipsFromHtml(malformed)).not.toThrow();
     expect(extractRelationshipsFromHtml(malformed)).toHaveLength(0);
+  });
+});
+
+describe("extractCoverageFromHtml", () => {
+  // Matches the header Meta stamps into every HTML export file.
+  const header = (fromIso: string, toIso: string) =>
+    `<div>Contains data you requested from <time datetime="${fromIso}">a date</time> to <time datetime="${toIso}">another date</time></div>`;
+
+  it("flags a one-year window as a limited (non all-time) export", () => {
+    const coverage = extractCoverageFromHtml(header("2025-07-26T03:59Z", "2026-07-26T03:59Z"));
+    expect(coverage).not.toBeNull();
+    expect(coverage!.spanDays).toBe(365);
+    expect(coverage!.looksLimited).toBe(true);
+  });
+
+  it("does not flag a genuinely long window", () => {
+    const coverage = extractCoverageFromHtml(header("2014-01-01T00:00Z", "2026-01-01T00:00Z"));
+    expect(coverage).not.toBeNull();
+    expect(coverage!.looksLimited).toBe(false);
+  });
+
+  it("returns null when the header is absent", () => {
+    expect(extractCoverageFromHtml("<html><body>no header</body></html>")).toBeNull();
+  });
+
+  it("returns null for a malformed or inverted date range", () => {
+    expect(extractCoverageFromHtml(header("not-a-date", "2026-07-26T03:59Z"))).toBeNull();
+    expect(extractCoverageFromHtml(header("2026-07-26T03:59Z", "2025-07-26T03:59Z"))).toBeNull();
   });
 });

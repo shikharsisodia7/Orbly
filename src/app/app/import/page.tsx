@@ -15,7 +15,11 @@ import { FirstSnapshotExplainer } from "@/components/import/FirstSnapshotExplain
 import { parseInstagramExport } from "@/lib/instagram/parser";
 import { hashDataset } from "@/lib/instagram/hash";
 import type { ParsedExport } from "@/lib/instagram/types";
-import { createSnapshot, findSnapshotByDatasetHash } from "@/lib/db/queries";
+import {
+  createSnapshot,
+  findSnapshotByDatasetHash,
+  reconcileQueueWithFollowing,
+} from "@/lib/db/queries";
 import { updateSettings } from "@/lib/db/queries";
 import { Logo } from "@/components/brand/Logo";
 
@@ -117,7 +121,11 @@ export default function ImportPage() {
       following: parsed.following,
       datasetHash,
       originalFileName: selectedFileName,
+      coverage: parsed.diagnostics.coverage,
     });
+    // Close out queue items for accounts that are no longer in the following
+    // list — already unfollowed, or the account no longer exists.
+    await reconcileQueueWithFollowing(parsed.following);
     await updateSettings({ onboardingCompleted: true });
     setCreating(false);
     setDuplicateOpen(false);

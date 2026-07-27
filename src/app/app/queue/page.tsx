@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { ListChecks, Zap, List } from "lucide-react";
+import { ListChecks, Zap, List, Eraser } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Button } from "@/components/ui/Button";
+import { clearCompletedAndSkipped } from "@/lib/db/queries";
 import { QueueItemRow } from "@/components/queue/QueueItemRow";
 import { OpenNextMode } from "@/components/queue/OpenNextMode";
 import { QueueExportMenu } from "@/components/queue/QueueExportMenu";
@@ -22,13 +24,31 @@ export default function QueuePage() {
   const [mode, setMode] = useState<"list" | "open-next">("list");
   const items = useQueueItems(tab);
   const allItems = useQueueItems();
+  const resolvedCount = (allItems ?? []).filter((i) => i.status !== "pending").length;
 
   return (
     <>
       <PageHeader
         title="Unfollow Queue"
         subtitle="Orbly opens each profile for you — you decide whether to unfollow."
-        action={allItems && allItems.length > 0 ? <QueueExportMenu items={allItems} /> : undefined}
+        action={
+          allItems && allItems.length > 0 ? (
+            <div className="flex items-center gap-2">
+              {resolvedCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => clearCompletedAndSkipped()}
+                  className="gap-1.5"
+                >
+                  <Eraser size={14} />
+                  Clear {resolvedCount} resolved
+                </Button>
+              )}
+              <QueueExportMenu items={allItems} />
+            </div>
+          ) : undefined
+        }
       />
 
       {(!allItems || allItems.length === 0) ? (

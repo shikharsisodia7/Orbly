@@ -6,7 +6,7 @@ import {
   usernameFromProfileUrl,
 } from "./normalize";
 import { classifyFile, looksLikeHtmlFile } from "./detect-files";
-import { extractRelationshipsFromHtml } from "./html-extract";
+import { extractCoverageFromHtml, extractRelationshipsFromHtml } from "./html-extract";
 import type { ParsedExport, ParseDiagnostics, Relationship } from "./types";
 
 export const MAX_ZIP_SIZE_BYTES = 2 * 1024 * 1024 * 1024; // 2GB safety ceiling
@@ -159,6 +159,7 @@ export async function parseInstagramExport(
     ignoredFiles: [],
     ignoredFileCount: 0,
     warnings: [],
+    coverage: null,
   };
 
   onStage?.("finding-followers");
@@ -182,6 +183,7 @@ export async function parseInstagramExport(
       classification = classifyFile(fileName, undefined).classification;
       if (classification === "followers" || classification === "following") {
         relationships = extractRelationshipsFromHtml(raw);
+        diagnostics.coverage ??= extractCoverageFromHtml(raw);
       }
     } else {
       let json: unknown;

@@ -1,5 +1,6 @@
+import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { formatCount } from "@/lib/utils/format";
+import { formatCount, formatFullDate } from "@/lib/utils/format";
 import type { ParsedExport } from "@/lib/instagram/types";
 import { computeCurrentRelationships } from "@/lib/instagram/comparisons";
 
@@ -24,9 +25,32 @@ export function ConfirmationSummary({ parsed, onConfirm, onCancel, creating }: C
     { label: "You Don't Follow Back", value: youDontFollowBack.length },
   ];
 
+  const coverage = parsed.diagnostics.coverage;
+
   return (
     <div className="mx-auto w-full max-w-md rounded-2xl border border-border bg-white p-7">
       <p className="text-sm font-semibold text-ink">Instagram export found</p>
+
+      {coverage?.looksLimited && (
+        <div className="mt-4 flex gap-3 rounded-xl border border-orange/30 bg-orange-soft/50 p-4">
+          <AlertTriangle size={17} className="mt-0.5 shrink-0 text-orange" />
+          <div className="text-xs leading-relaxed text-ink-soft">
+            <p className="font-semibold text-ink">This export doesn&apos;t cover all time.</p>
+            <p className="mt-1">
+              Meta says this file only covers{" "}
+              <strong>
+                {formatFullDate(coverage.fromIso)} – {formatFullDate(coverage.toIso)}
+              </strong>{" "}
+              (about {Math.round(coverage.spanDays / 30)} months), so followers from before that
+              window are missing and these counts will be lower than your real totals.
+            </p>
+            <p className="mt-1.5">
+              To fix this, request a new export and set the date range to{" "}
+              <strong>All time</strong> before submitting.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="mt-5 grid grid-cols-2 gap-4">
         {rows.map((row) => (

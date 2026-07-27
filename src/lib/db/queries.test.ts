@@ -10,6 +10,7 @@ import {
   getSettings,
   getSnapshotFollowers,
   getSnapshotFollowing,
+  reconcileQueueWithFollowing,
   updateQueueItemStatus,
   updateSettings,
 } from "./queries";
@@ -132,6 +133,57 @@ describe("queue", () => {
     await updateQueueItemStatus(item.id, "completed");
     expect(await getQueueItems("completed")).toHaveLength(1);
     expect(await getQueueItems("pending")).toHaveLength(0);
+  });
+});
+
+describe("reconcileQueueWithFollowing", () => {
+  async function queueTwo() {
+    await addManyToQueue([
+      {
+        normalizedUsername: "alice",
+        displayUsername: "alice",
+        profileUrl: "https://www.instagram.com/alice/",
+        source: "does-not-follow-back",
+      },
+      {
+        normalizedUsername: "bob",
+        displayUsername: "bob",
+        profileUrl: "https://www.instagram.com/bob/",
+        source: "does-not-follow-back",
+      },
+    ]);
+  }
+
+  it("closes out pending items no longer present in the following list", async () => {
+    await queueTwo();
+    // The new export still follows alice, but bob is gone (unfollowed or deleted).
+    const resolved = await reconcileQueueWithFollowing([rel("alice")]);
+    expect(resolved).toBe(1);
+
+    const pending = await getQueueItems("pending");
+    expect(pending.map((i) => i.normalizedUsername)).toEqual(["alice"]);
+
+    const completed = await getQueueItems("completed");
+    expect(completed.map((i) => i.normalizedUsername)).toEqual(["bob"]);
+  });
+
+  it("leaves everything pending when the whole queue is still followed", async () => {
+    await queueTwo();
+    const resolved = await reconcileQueueWithFollowing([rel("alice"), rel("bob")]);
+    expect(resolved).toBe(0);
+    expect(await getQueueItems("pending")).toHaveLength(2);
+  });
+
+  it("does not reopen or disturb items the user already skipped", async () => {
+    await queueTwo();
+    const [first] = await getQueueItems();
+    await updateQueueItemStatus(first.id, "skipped");
+
+    await reconcileQueueWithFollowing([]);
+
+    const skipped = await getQueueItems("skipped");
+    expect(skipped).toHaveLength(1);
+    expect(skipped[0].id).toBe(first.id);
   });
 });
 

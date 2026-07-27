@@ -12,12 +12,27 @@ export interface Relationship {
   timestamp: number | null;
 }
 
+/**
+ * The date window Meta says the export actually covers. Meta prints this in the
+ * export's own header, and it does NOT always match what you asked for — an
+ * export requested as "All time" can still come back covering only the last
+ * year, which silently truncates your follower list.
+ */
+export interface ExportCoverage {
+  fromIso: string;
+  toIso: string;
+  spanDays: number;
+  /** True when the window is too short to plausibly be a true all-time export. */
+  looksLimited: boolean;
+}
+
 export interface ParseDiagnostics {
   followerFilesUsed: string[];
   followingFilesUsed: string[];
   ignoredFiles: string[];
   ignoredFileCount: number;
   warnings: string[];
+  coverage: ExportCoverage | null;
 }
 
 export interface ParsedExport {

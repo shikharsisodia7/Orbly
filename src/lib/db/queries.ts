@@ -8,7 +8,7 @@ import type {
   SnapshotFollowingRecord,
   SnapshotRecord,
 } from "./schema";
-import type { Relationship } from "@/lib/instagram/types";
+import type { ExportCoverage, Relationship } from "@/lib/instagram/types";
 
 function newId(): string {
   return crypto.randomUUID();
@@ -20,6 +20,7 @@ export interface CreateSnapshotInput {
   datasetHash: string;
   originalFileName: string | null;
   label?: string;
+  coverage?: ExportCoverage | null;
 }
 
 export async function createSnapshot(input: CreateSnapshotInput): Promise<SnapshotRecord> {
@@ -34,6 +35,9 @@ export async function createSnapshot(input: CreateSnapshotInput): Promise<Snapsh
     followingCount: input.following.length,
     datasetHash: input.datasetHash,
     originalFileName: input.originalFileName,
+    coverageFromIso: input.coverage?.fromIso ?? null,
+    coverageToIso: input.coverage?.toIso ?? null,
+    coverageLooksLimited: input.coverage?.looksLimited ?? false,
   };
 
   const followerRecords: SnapshotFollowerRecord[] = input.followers.map((rel) => ({
@@ -198,6 +202,32 @@ export async function addManyToQueue(items: AddToQueueInput[]): Promise<number> 
 
 export async function updateQueueItemStatus(id: string, status: QueueStatus): Promise<void> {
   await getDb().queueItems.update(id, { status });
+}
+
+/**
+ * Reconciles the queue against a freshly imported following list.
+ *
+ * A pending queue item whose username is absent from the new export is no
+ * longer someone you follow — either you unfollowed them, or their account was
+ * deleted/deactivated and Instagram dropped it from your list. Either way the
+ * item is resolved, so we close it out instead of leaving a dead row behind.
+ *
+ * Returns the number of items resolved.
+ */
+export async function reconcileQueueWithFollowing(
+  currentFollowing: Relationship[]
+): Promise<number> {
+  const db = getDb();
+  const stillFollowing = new Set(currentFollowing.map((r) => r.normalizedUsername));
+  const pending = await db.queueItems.where("status").equals("pending").toArray();
+  const resolved = pending.filter((item) => !stillFollowing.has(item.normalizedUsername));
+
+  if (resolved.length > 0) {
+    await db.queueItems.bulkPut(
+      resolved.map((item) => ({ ...item, status: "completed" as const }))
+    );
+  }
+  return resolved.length;
 }
 
 export async function removeQueueItem(id: string): Promise<void> {

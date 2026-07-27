@@ -9,6 +9,9 @@ export const backupSnapshotSchema = z.object({
   followingCount: z.number(),
   datasetHash: z.string(),
   originalFileName: z.string().nullable(),
+  coverageFromIso: z.string().nullable().optional(),
+  coverageToIso: z.string().nullable().optional(),
+  coverageLooksLimited: z.boolean().optional(),
 });
 
 export const backupRelationshipSchema = z.object({

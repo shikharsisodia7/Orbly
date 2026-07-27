@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, ExternalLink, Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, ExternalLink, Check, AlertTriangle } from "lucide-react";
 import { WIZARD_STAGES } from "./wizard-steps";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils/cn";
@@ -63,6 +63,13 @@ export function ExportWizard({ onFinish }: ExportWizardProps) {
                 </li>
               ))}
             </ul>
+
+            {stage.callout && (
+              <div className="mt-5 flex gap-2.5 rounded-xl border border-orange/30 bg-orange-soft/50 p-4">
+                <AlertTriangle size={16} className="mt-0.5 shrink-0 text-orange" />
+                <p className="text-xs leading-relaxed text-ink-soft">{stage.callout}</p>
+              </div>
+            )}
 
             {stage.action && (
               <a

@@ -15,7 +15,10 @@ export function ReturningUserUpdate({ onUpload, onShowInstructions }: ReturningU
       <h1 className="mt-6 text-3xl font-semibold tracking-tight text-ink">Create a new snapshot</h1>
       <ol className="mt-5 list-decimal space-y-1.5 pl-5 text-left text-sm text-ink-soft">
         <li>Request another Followers + Following export from Instagram.</li>
-        <li>Choose All time.</li>
+        <li>
+          Choose <strong className="text-ink">All time</strong> — double-check this, Meta often
+          defaults to the last year.
+        </li>
         <li>Choose JSON.</li>
         <li>Download the ZIP.</li>
         <li>Upload it here.</li>
