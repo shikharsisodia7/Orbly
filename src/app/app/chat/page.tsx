@@ -56,6 +56,8 @@ export default function ChatPage() {
   const [processingStage, setProcessingStage] = useState<ProcessingStageId>("opening-zip");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [manualUploadOpen, setManualUploadOpen] = useState(false);
+  const showUpload = loaded && (!hasData || manualUploadOpen);
 
   async function handleFile(file: File) {
     setUploadError(null);
@@ -108,6 +110,7 @@ export default function ChatPage() {
       setProcessingStage("complete");
       await new Promise((r) => setTimeout(r, 500));
       setImportStage("upload");
+      setManualUploadOpen(false);
     } catch (err) {
       setUploadError(
         err instanceof Error ? err.message : "Something went wrong reading that file. Please try again."
@@ -192,9 +195,19 @@ export default function ChatPage() {
       <PageHeader
         title="Ask Orbly"
         subtitle="Ask anything about who follows you, who you follow, or Instagram in general."
+        action={
+          loaded && hasData ? (
+            <button
+              onClick={() => setManualUploadOpen((v) => !v)}
+              className="rounded-lg border border-border-strong bg-white px-3 py-1.5 text-xs font-medium text-ink-soft hover:bg-surface"
+            >
+              {manualUploadOpen ? "Cancel" : "Update Instagram data"}
+            </button>
+          ) : undefined
+        }
       />
 
-      {loaded && !hasData && (
+      {showUpload && (
         <div className="mb-4 space-y-3">
           {importStage === "upload" && (
             <>
