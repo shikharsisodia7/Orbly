@@ -2,6 +2,14 @@
   "name": "orbly",
   "version": "0.1.0",
   "private": true,
+  "description": "Ask anything about your Instagram circle — an AI chat that reads your Instagram data export locally in your browser and answers who doesn't follow you back, who unfollowed you, and more.",
+  "homepage": "https://orbly-drab.vercel.app",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shikharsisodia7/Orbly.git"
+  },
+  "license": "MIT",
+  "author": "Shikhar Sisodia",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
