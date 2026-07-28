@@ -10,7 +10,7 @@ Upload your official Instagram export once, then just ask — who doesn't follow
 unfollowed you, whether one specific account follows you back. Orbly answers in plain English,
 in one chat.
 
-[**Try it live →**](https://orbly-drab.vercel.app) · [Privacy](https://orbly-drab.vercel.app/privacy) · [License: MIT](LICENSE)
+[**Try it live →**](https://orbly-drab.vercel.app) · [Privacy](https://orbly-drab.vercel.app/privacy) · [License: MIT](LICENSE) · [How this was built with Claude Code →](docs/CASE_STUDY.md)
 
 </div>
 
