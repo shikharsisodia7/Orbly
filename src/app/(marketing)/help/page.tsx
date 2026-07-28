@@ -34,7 +34,7 @@ const SECTIONS = [
         <li>Request the export. Meta may take anywhere from a few minutes to a day or more to prepare it.</li>
         <li>When it&apos;s ready, Meta will notify you — download the ZIP file to your device.</li>
         <li>
-          Come back to Orbly and upload that ZIP on the <Link href="/app/import" className="text-blue underline">import page</Link>.
+          Come back to Orbly and drop that ZIP into the upload box at the top of the <Link href="/app/chat" className="text-blue underline">chat</Link>.
         </li>
       </ol>
     ),

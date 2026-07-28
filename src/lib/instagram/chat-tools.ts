@@ -38,7 +38,7 @@ async function getRelationshipsForSnapshot(snapshotId: string) {
 const NO_DATA_RESULT = {
   available: false as const,
   message:
-    "No usable Instagram data has been imported into Orbly yet (or the only snapshot imported is partial/invalid). Tell the user to import their Instagram data export from the Import page first.",
+    "No usable Instagram data has been imported into Orbly yet (or the only snapshot imported is partial/invalid). Tell the user to upload their Instagram export using the drag-and-drop box at the top of this chat page — there's no separate import page.",
 };
 
 export async function getAccountStats() {

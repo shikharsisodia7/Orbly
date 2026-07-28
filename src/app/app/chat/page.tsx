@@ -3,11 +3,23 @@
 import { useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, getToolName, isToolUIPart, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
+import { AnimatePresence, motion } from "framer-motion";
 import { Bot, Send, User } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Dropzone } from "@/components/import/Dropzone";
+import { ExportWizard } from "@/components/import/ExportWizard";
+import { ProcessingStages, type ProcessingStageId } from "@/components/import/ProcessingStages";
 import { useSnapshots } from "@/hooks/useSnapshots";
+import { parseInstagramExport } from "@/lib/instagram/parser";
+import { hashDataset } from "@/lib/instagram/hash";
+import {
+  createSnapshot,
+  findSnapshotByDatasetHash,
+  reconcileQueueWithFollowing,
+  updateSettings,
+} from "@/lib/db/queries";
 import {
   checkAccount,
   getAccountStats,
@@ -32,10 +44,77 @@ const SUGGESTIONS = [
   "Who unfollowed me recently?",
 ];
 
+type ImportStage = "upload" | "processing";
+
 export default function ChatPage() {
   const snapshots = useSnapshots();
+  const loaded = snapshots !== undefined;
   const hasData = (snapshots?.length ?? 0) > 0;
   const [input, setInput] = useState("");
+
+  const [importStage, setImportStage] = useState<ImportStage>("upload");
+  const [processingStage, setProcessingStage] = useState<ProcessingStageId>("opening-zip");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+
+  async function handleFile(file: File) {
+    setUploadError(null);
+    setImportStage("processing");
+    setProcessingStage("opening-zip");
+
+    try {
+      const result = await parseInstagramExport(file, {
+        onStage: (stage) => {
+          if (stage !== "done") setProcessingStage(stage);
+        },
+      });
+
+      const hasFollowers = result.diagnostics.followerFilesUsed.length > 0;
+      const hasFollowing = result.diagnostics.followingFilesUsed.length > 0;
+      if (!hasFollowers || !hasFollowing) {
+        setUploadError(
+          "Orbly couldn't find both followers and following data in that file. Make sure you selected the right export — see the steps below — and try again."
+        );
+        setImportStage("upload");
+        return;
+      }
+
+      setProcessingStage("calculating");
+      const hash = await hashDataset(result.followers, result.following);
+
+      setProcessingStage("checking-duplicate");
+      if (result.diagnostics.coverage?.looksLimited) {
+        setUploadError(
+          "This export only covers a limited date range, not all time, so Orbly can't trust it as your complete follower list. Re-export with the date range set to \"All time\" — see the steps below."
+        );
+        setImportStage("upload");
+        return;
+      }
+
+      const existing = await findSnapshotByDatasetHash(hash);
+      if (!existing) {
+        await createSnapshot({
+          followers: result.followers,
+          following: result.following,
+          datasetHash: hash,
+          originalFileName: file.name,
+          coverage: result.diagnostics.coverage,
+          profileReference: null,
+        });
+        await reconcileQueueWithFollowing(result.following);
+        await updateSettings({ onboardingCompleted: true });
+      }
+
+      setProcessingStage("complete");
+      await new Promise((r) => setTimeout(r, 500));
+      setImportStage("upload");
+    } catch (err) {
+      setUploadError(
+        err instanceof Error ? err.message : "Something went wrong reading that file. Please try again."
+      );
+      setImportStage("upload");
+    }
+  }
 
   const { messages, sendMessage, addToolOutput, status } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
@@ -115,17 +194,43 @@ export default function ChatPage() {
         subtitle="Ask anything about who follows you, who you follow, or Instagram in general."
       />
 
-      {!hasData && (
-        <p className="mb-4 rounded-lg bg-surface px-3 py-2 text-xs text-ink-soft">
-          No Instagram data imported yet — general questions still work, but questions about your
-          own followers/following need an import first.
-        </p>
+      {loaded && !hasData && (
+        <div className="mb-4 space-y-3">
+          {importStage === "upload" && (
+            <>
+              <Dropzone onFileSelected={handleFile} error={uploadError} />
+              <div className="text-center">
+                <button
+                  onClick={() => setWizardOpen((v) => !v)}
+                  className="text-xs font-medium text-ink-soft underline underline-offset-2 hover:text-ink"
+                >
+                  {wizardOpen ? "Hide the steps" : "Don't have your export yet? Show me the steps"}
+                </button>
+              </div>
+              <AnimatePresence initial={false}>
+                {wizardOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden"
+                  >
+                    <ExportWizard onFinish={() => setWizardOpen(false)} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </>
+          )}
+          {importStage === "processing" && <ProcessingStages current={processingStage} />}
+        </div>
       )}
 
       <p className="mb-4 rounded-lg bg-surface px-3 py-2 text-xs text-ink-soft">
         When you ask about your own account, relevant data from your imported snapshot is sent to
-        Anthropic&apos;s API to generate a response. Every other page in Orbly stays fully local —
-        this is the one feature that leaves your browser.
+        Anthropic&apos;s API to generate a response. Your export file itself is only ever parsed
+        locally in your browser and stored on this device — this is the one feature that sends
+        anything off of it.
       </p>
 
       <div className="flex min-h-[50vh] flex-col rounded-2xl border border-border bg-white">

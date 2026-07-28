@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
-import { Sidebar } from "@/components/navigation/Sidebar";
-import { MobileNav } from "@/components/navigation/MobileNav";
-import { AppTopBar } from "@/components/navigation/AppTopBar";
+import Link from "next/link";
+import { Settings } from "lucide-react";
+import { Wordmark } from "@/components/brand/Wordmark";
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
@@ -9,13 +9,20 @@ export const metadata: Metadata = {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-full bg-paper">
-      <Sidebar />
-      <div className="md:pl-64">
-        <AppTopBar />
-        <main className="px-5 pb-24 pt-6 md:px-8 md:pb-10">{children}</main>
-      </div>
-      <MobileNav />
+    <div className="flex min-h-full flex-col bg-paper">
+      <header className="flex h-14 items-center justify-between border-b border-border px-4 md:px-6">
+        <Link href="/app/chat">
+          <Wordmark size="sm" />
+        </Link>
+        <Link
+          href="/app/settings"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-ink-faint hover:bg-surface hover:text-ink"
+          aria-label="Settings"
+        >
+          <Settings size={16} />
+        </Link>
+      </header>
+      <main className="flex-1 px-4 py-4 md:px-6">{children}</main>
     </div>
   );
 }
