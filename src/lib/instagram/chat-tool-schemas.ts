@@ -13,6 +13,12 @@ export const paginatedListInputSchema = z.object({
     .optional()
     .describe("Optional substring to filter usernames by, case-insensitive."),
   offset: z.number().int().min(0).optional().describe("How many matching results to skip. Defaults to 0."),
+  after: z
+    .string()
+    .optional()
+    .describe(
+      "Internal pagination cursor: return results alphabetically after this exact normalized username instead of using offset. Not needed for normal use — offset is fine."
+    ),
   limit: z
     .number()
     .int()

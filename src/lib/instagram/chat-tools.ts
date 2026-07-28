@@ -35,6 +35,20 @@ async function getRelationshipsForSnapshot(snapshotId: string) {
   };
 }
 
+/**
+ * Usernames the user has already marked "unfollowed" via the queue (either
+ * from this chat's interactive list, or the older dashboard's Queue page —
+ * both write to the same table). The current snapshot was taken before that
+ * happened, so its raw export still lists them; hiding them here is what
+ * keeps a repeated "who doesn't follow me back" from re-surfacing someone
+ * already handled. They reappear correctly, or drop out for good, on the
+ * next re-import.
+ */
+async function getResolvedUsernames(): Promise<Set<string>> {
+  const completed = await getDb().queueItems.where("status").equals("completed").toArray();
+  return new Set(completed.map((item) => item.normalizedUsername));
+}
+
 const NO_DATA_RESULT = {
   available: false as const,
   message:
@@ -45,35 +59,49 @@ export async function getAccountStats() {
   const snapshot = await getLatestUsableSnapshot();
   if (!snapshot) return NO_DATA_RESULT;
   const { followers, following } = await getRelationshipsForSnapshot(snapshot.id);
+  const resolved = await getResolvedUsernames();
+  const stats = buildAccountStats(followers, following);
   return {
     available: true as const,
     snapshotImportedAt: snapshot.importedAt,
     snapshotLabel: snapshot.label ?? null,
-    ...buildAccountStats(followers, following),
+    ...stats,
+    // The raw don't-follow-back count is a fact about the snapshot; the
+    // outstanding count also accounts for ones the user already marked
+    // unfollowed since that snapshot was taken, matching the list itself.
+    doesNotFollowBackCount: Math.max(0, stats.doesNotFollowBackCount - resolved.size),
   };
 }
 
 async function listFromBreakdown(
   input: PaginatedListInput,
-  pick: (breakdown: ReturnType<typeof computeCurrentRelationships>) => ReturnType<typeof computeCurrentRelationships>["mutuals"]
+  pick: (breakdown: ReturnType<typeof computeCurrentRelationships>) => ReturnType<typeof computeCurrentRelationships>["mutuals"],
+  excludeResolved: boolean
 ): Promise<{ available: true; result: PaginatedResult } | typeof NO_DATA_RESULT> {
   const snapshot = await getLatestUsableSnapshot();
   if (!snapshot) return NO_DATA_RESULT;
   const { followers, following } = await getRelationshipsForSnapshot(snapshot.id);
   const breakdown = computeCurrentRelationships(followers, following);
-  return { available: true, result: searchAndPaginate(pick(breakdown), input) };
+  const picked = pick(breakdown);
+  const filtered = excludeResolved
+    ? await (async () => {
+        const resolved = await getResolvedUsernames();
+        return resolved.size === 0 ? picked : picked.filter((r) => !resolved.has(r.normalizedUsername));
+      })()
+    : picked;
+  return { available: true, result: searchAndPaginate(filtered, input) };
 }
 
 export async function listDoesNotFollowBack(input: PaginatedListInput) {
-  return listFromBreakdown(input, (b) => b.doesNotFollowBack);
+  return listFromBreakdown(input, (b) => b.doesNotFollowBack, true);
 }
 
 export async function listMutuals(input: PaginatedListInput) {
-  return listFromBreakdown(input, (b) => b.mutuals);
+  return listFromBreakdown(input, (b) => b.mutuals, false);
 }
 
 export async function listYouDontFollowBack(input: PaginatedListInput) {
-  return listFromBreakdown(input, (b) => b.youDontFollowBack);
+  return listFromBreakdown(input, (b) => b.youDontFollowBack, false);
 }
 
 export async function checkAccount(input: CheckAccountInput) {

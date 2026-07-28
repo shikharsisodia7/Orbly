@@ -21,12 +21,23 @@ function toItem(rel: Relationship) {
   return { username: rel.displayUsername, normalizedUsername: rel.normalizedUsername, profileUrl: rel.profileUrl };
 }
 
-/** Filters by a case-insensitive substring match on the username, then paginates. */
+/**
+ * Filters by a case-insensitive substring match on the username, then
+ * paginates either by numeric offset or by an `after` cursor.
+ *
+ * `after` (a normalizedUsername) is the stable option: it means "the next
+ * items alphabetically past this username," which stays correct even if
+ * items earlier in the sorted list have since been excluded (e.g. marked
+ * resolved in the unfollow queue) — a plain numeric offset would silently
+ * skip or repeat items once the underlying list has shrunk out from under
+ * it. Callers doing one-at-a-time replenishment (the interactive
+ * doesn't-follow-back list) should always use `after`, not `offset`.
+ */
 export function searchAndPaginate(
   list: Relationship[],
-  options: { query?: string; offset?: number; limit?: number } = {}
+  options: { query?: string; offset?: number; after?: string; limit?: number } = {}
 ): PaginatedResult {
-  const { query, offset = 0, limit = DEFAULT_LIMIT } = options;
+  const { query, offset = 0, after, limit = DEFAULT_LIMIT } = options;
   const boundedLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
 
   const filtered = query
@@ -34,12 +45,15 @@ export function searchAndPaginate(
     : list;
 
   const sorted = [...filtered].sort((a, b) => a.normalizedUsername.localeCompare(b.normalizedUsername));
-  const page = sorted.slice(offset, offset + boundedLimit);
+
+  const startIndex = after ? sorted.findIndex((r) => r.normalizedUsername > after) : offset;
+  const effectiveStart = startIndex === -1 ? sorted.length : startIndex;
+  const page = sorted.slice(effectiveStart, effectiveStart + boundedLimit);
 
   return {
-    total: filtered.length,
+    total: sorted.length,
     items: page.map(toItem),
-    hasMore: offset + boundedLimit < filtered.length,
+    hasMore: effectiveStart + boundedLimit < sorted.length,
   };
 }
 

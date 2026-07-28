@@ -313,7 +313,7 @@ function QueueStatusCard({ output }: { output: QueueStatusOutput }) {
   );
 }
 
-export function ToolResultCard({ toolName, output, input }: { toolName: string; output: unknown; input?: unknown }) {
+export function ToolResultCard({ toolName, output }: { toolName: string; output: unknown }) {
   if (isUnavailable(output)) return <UnavailableCard />;
   if (!output || typeof output !== "object") return null;
 
@@ -322,17 +322,7 @@ export function ToolResultCard({ toolName, output, input }: { toolName: string; 
       return <AccountStatsCard output={output as AccountStatsOutput} />;
     case "listDoesNotFollowBack": {
       const { result } = output as PaginatedListOutput;
-      const requestedOffset =
-        input && typeof input === "object" && typeof (input as { offset?: unknown }).offset === "number"
-          ? (input as { offset: number }).offset
-          : 0;
-      return (
-        <DoesNotFollowBackList
-          initialItems={result.items}
-          initialTotal={result.total}
-          nextOffset={requestedOffset + result.items.length}
-        />
-      );
+      return <DoesNotFollowBackList initialItems={result.items} initialTotal={result.total} />;
     }
     case "listMutuals":
     case "listYouDontFollowBack":

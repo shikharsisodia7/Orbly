@@ -102,4 +102,37 @@ describe("searchAndPaginate", () => {
     expect(result.items).toHaveLength(0);
     expect(result.hasMore).toBe(false);
   });
+
+  describe("after cursor", () => {
+    it("returns the item immediately following the cursor", () => {
+      const small = [rel("alice"), rel("bob"), rel("charlie"), rel("dave")];
+      const result = searchAndPaginate(small, { after: "bob", limit: 1 });
+      expect(result.items.map((i) => i.username)).toEqual(["charlie"]);
+    });
+
+    it("stays correct even after earlier items have been removed from the source list", () => {
+      // Regression: this is exactly what happens once an account is marked
+      // "unfollowed" and excluded from the list before pagination — a plain
+      // numeric offset would drift and skip the next real item, but a
+      // cursor anchored to actual content doesn't care what disappeared
+      // ahead of it.
+      const full = [rel("alice"), rel("bob"), rel("charlie"), rel("dave"), rel("erin")];
+      const first = searchAndPaginate(full, { offset: 0, limit: 2 });
+      expect(first.items.map((i) => i.username)).toEqual(["alice", "bob"]);
+
+      // "alice" gets marked unfollowed and removed from the source before
+      // the next fetch, exactly like the resolved-usernames filter does.
+      const afterRemoval = full.filter((r) => r.normalizedUsername !== "alice");
+      const cursor = first.items[first.items.length - 1].username; // "bob"
+      const next = searchAndPaginate(afterRemoval, { after: cursor, limit: 1 });
+      expect(next.items.map((i) => i.username)).toEqual(["charlie"]);
+    });
+
+    it("reports no more results once the cursor is past the end", () => {
+      const small = [rel("alice"), rel("bob")];
+      const result = searchAndPaginate(small, { after: "bob", limit: 1 });
+      expect(result.items).toHaveLength(0);
+      expect(result.hasMore).toBe(false);
+    });
+  });
 });

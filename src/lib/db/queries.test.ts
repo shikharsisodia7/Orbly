@@ -10,6 +10,7 @@ import {
   getSettings,
   getSnapshotFollowers,
   getSnapshotFollowing,
+  markAccountUnfollowed,
   reconcileQueueWithFollowing,
   updateQueueItemStatus,
   updateSettings,
@@ -176,6 +177,42 @@ describe("queue", () => {
     await updateQueueItemStatus(item.id, "completed");
     expect(await getQueueItems("completed")).toHaveLength(1);
     expect(await getQueueItems("pending")).toHaveLength(0);
+  });
+});
+
+describe("markAccountUnfollowed", () => {
+  it("inserts a new queue entry as completed, not pending", async () => {
+    await markAccountUnfollowed({
+      normalizedUsername: "alice",
+      displayUsername: "Alice",
+      profileUrl: "https://www.instagram.com/alice/",
+    });
+    const items = await getQueueItems();
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      normalizedUsername: "alice",
+      status: "completed",
+      source: "does-not-follow-back",
+    });
+  });
+
+  it("flips an existing pending entry to completed instead of duplicating it", async () => {
+    await addManyToQueue([
+      {
+        normalizedUsername: "alice",
+        displayUsername: "alice",
+        profileUrl: "https://www.instagram.com/alice/",
+        source: "manual",
+      },
+    ]);
+    await markAccountUnfollowed({
+      normalizedUsername: "alice",
+      displayUsername: "alice",
+      profileUrl: "https://www.instagram.com/alice/",
+    });
+    const items = await getQueueItems();
+    expect(items).toHaveLength(1);
+    expect(items[0].status).toBe("completed");
   });
 });
 

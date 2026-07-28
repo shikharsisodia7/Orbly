@@ -346,7 +346,7 @@ export default function ChatPage() {
                               </motion.span>
                               Checked {label}
                             </div>
-                            <ToolResultCard toolName={getToolName(part)} output={part.output} input={part.input} />
+                            <ToolResultCard toolName={getToolName(part)} output={part.output} />
                           </motion.div>
                         );
                       }

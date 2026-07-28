@@ -18,8 +18,6 @@ interface ListItem {
 interface DoesNotFollowBackListProps {
   initialItems: ListItem[];
   initialTotal: number;
-  /** Index into the full sorted list of the next item to fetch as a replacement. */
-  nextOffset: number;
 }
 
 /**
@@ -29,12 +27,19 @@ interface DoesNotFollowBackListProps {
  * queue rather than a single fixed page. Orbly has no live connection to
  * Instagram — this records what the user says they've done, the same way
  * the existing manual Unfollow Queue always has.
+ *
+ * Replenishment fetches use an `after: <last visible username>` cursor
+ * rather than a numeric offset. listDoesNotFollowBack already excludes
+ * resolved accounts, so the underlying filtered list shrinks by one every
+ * time an item here gets marked done — a numeric offset would silently
+ * drift and skip an account each time; a cursor anchored to actual content
+ * stays correct regardless of how many items ahead of it disappear.
  */
-export function DoesNotFollowBackList({ initialItems, initialTotal, nextOffset }: DoesNotFollowBackListProps) {
+export function DoesNotFollowBackList({ initialItems, initialTotal }: DoesNotFollowBackListProps) {
   const [items, setItems] = useState(initialItems);
-  const [offset, setOffset] = useState(nextOffset);
   const [handledCount, setHandledCount] = useState(0);
   const [loadingUsername, setLoadingUsername] = useState<string | null>(null);
+  const [exhausted, setExhausted] = useState(false);
 
   const remaining = Math.max(0, initialTotal - handledCount);
 
@@ -50,14 +55,16 @@ export function DoesNotFollowBackList({ initialItems, initialTotal, nextOffset }
         profileUrl: item.profileUrl,
       });
 
-      if (offset < initialTotal) {
-        const next = await listDoesNotFollowBack({ offset, limit: 1 });
+      if (!exhausted) {
+        const cursor = items.length > 0 ? items[items.length - 1].normalizedUsername : item.normalizedUsername;
+        const next = await listDoesNotFollowBack({ after: cursor, limit: 1 });
         if (next.available && next.result.items.length > 0) {
           const candidate = next.result.items[0];
           setItems((prev) =>
             prev.some((i) => i.normalizedUsername === candidate.normalizedUsername) ? prev : [...prev, candidate]
           );
-          setOffset((o) => o + 1);
+        } else {
+          setExhausted(true);
         }
       }
     } finally {
