@@ -312,3 +312,60 @@ describe("parseInstagramExport — current Meta export shape (title-only, no val
     expect(breakdown.youDontFollowBack).toHaveLength(0);
   });
 });
+
+describe("parseInstagramExport — deleted-account placeholders", () => {
+  // Real examples from an actual export: Meta replaces a deleted/deactivated
+  // account's username with a synthetic placeholder instead of dropping the
+  // record. These aren't real, clickable accounts, so they must never reach
+  // followers/following, counts, or comparisons — just be silently excluded.
+  it("excludes __deleted__-style placeholders from following.json", async () => {
+    const zip = new JSZip();
+    const followingRecords = [
+      {
+        title: "__deleted__bhiebedffbadibdch",
+        string_list_data: [
+          { href: "https://www.instagram.com/_u/__deleted__bhiebedffbadibdch", timestamp: 1687933153 },
+        ],
+      },
+      {
+        title: "realuser",
+        string_list_data: [{ href: "https://www.instagram.com/_u/realuser", timestamp: 1690000000 }],
+      },
+    ];
+    zip.file("following.json", JSON.stringify({ relationships_following: followingRecords }));
+    const buffer = await zip.generateAsync({ type: "arraybuffer" });
+    const result = await parseInstagramExport(buffer);
+
+    expect(result.following).toHaveLength(1);
+    expect(result.following[0].normalizedUsername).toBe("realuser");
+    expect(result.diagnostics.followingRawRecords).toBe(2);
+    expect(result.diagnostics.followingInvalidRecords).toBe(1);
+  });
+
+  it("excludes deleted<hash>-style placeholders from followers files", async () => {
+    const zip = new JSZip();
+    const followerRecords = [
+      {
+        title: "",
+        media_list_data: [],
+        string_list_data: [
+          { href: "https://www.instagram.com/deletedorangeufuuf", value: "deletedorangeufuuf", timestamp: 1600448021 },
+        ],
+      },
+      {
+        title: "",
+        media_list_data: [],
+        string_list_data: [
+          { href: "https://www.instagram.com/realuser/", value: "realuser", timestamp: 1690000000 },
+        ],
+      },
+    ];
+    zip.file("followers_1.json", JSON.stringify(followerRecords));
+    const buffer = await zip.generateAsync({ type: "arraybuffer" });
+    const result = await parseInstagramExport(buffer);
+
+    expect(result.followers).toHaveLength(1);
+    expect(result.followers[0].normalizedUsername).toBe("realuser");
+    expect(result.diagnostics.followerInvalidRecords).toBe(1);
+  });
+});

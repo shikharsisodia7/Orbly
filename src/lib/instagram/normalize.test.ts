@@ -51,6 +51,14 @@ describe("isPlausibleUsername", () => {
     expect(isPlausibleUsername("...")).toBe(false);
     expect(isPlausibleUsername("___")).toBe(false);
   });
+
+  it("rejects Meta's deleted-account placeholders, in both observed forms", () => {
+    // Real examples from an actual Instagram export: following.json uses
+    // "__deleted__<hash>", followers files use "deleted<hash>" — neither
+    // is a real, clickable account.
+    expect(isPlausibleUsername("__deleted__bhiebedffbadibdch")).toBe(false);
+    expect(isPlausibleUsername("deletedorangeufuuf")).toBe(false);
+  });
 });
 
 describe("usernameFromProfileUrl", () => {

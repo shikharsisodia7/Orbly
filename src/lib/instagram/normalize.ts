@@ -6,6 +6,16 @@
 
 const VALID_USERNAME = /^[a-z0-9._]{1,30}$/;
 
+/**
+ * Meta replaces the username of a deleted/deactivated account with a
+ * synthetic placeholder when generating an export — observed as both
+ * "__deleted__<hash>" (following.json) and "deleted<hash>" (followers
+ * files). These aren't real accounts: there's nothing to view, follow, or
+ * unfollow, and their profile links always 404. Treated as unparseable so
+ * they never enter any relationship set, list, or count.
+ */
+const DELETED_ACCOUNT_PLACEHOLDER = /^_{0,2}deleted/i;
+
 export function normalizeUsername(raw: string): string {
   return raw.trim().replace(/^@+/, "").toLowerCase();
 }
@@ -15,6 +25,7 @@ export function isPlausibleUsername(normalized: string): boolean {
   if (!VALID_USERNAME.test(normalized)) return false;
   // Instagram usernames can't be all periods/underscores.
   if (!/[a-z0-9]/.test(normalized)) return false;
+  if (DELETED_ACCOUNT_PLACEHOLDER.test(normalized)) return false;
   return true;
 }
 
