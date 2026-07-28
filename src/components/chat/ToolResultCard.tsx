@@ -7,6 +7,7 @@ import { AnimatedCounter } from "@/components/motion/AnimatedCounter";
 import { ValidityBadge } from "@/components/ui/ValidityBadge";
 import { formatCount } from "@/lib/utils/format";
 import type { DatasetValidity } from "@/lib/instagram/validity";
+import { DoesNotFollowBackList } from "./DoesNotFollowBackList";
 
 /**
  * Renders a rich, animated visualization for a chat tool's result, so the
@@ -104,7 +105,7 @@ interface PaginatedListOutput {
   available: true;
   result: {
     total: number;
-    items: { username: string; profileUrl: string }[];
+    items: { username: string; normalizedUsername: string; profileUrl: string }[];
     hasMore: boolean;
   };
 }
@@ -312,14 +313,27 @@ function QueueStatusCard({ output }: { output: QueueStatusOutput }) {
   );
 }
 
-export function ToolResultCard({ toolName, output }: { toolName: string; output: unknown }) {
+export function ToolResultCard({ toolName, output, input }: { toolName: string; output: unknown; input?: unknown }) {
   if (isUnavailable(output)) return <UnavailableCard />;
   if (!output || typeof output !== "object") return null;
 
   switch (toolName) {
     case "getAccountStats":
       return <AccountStatsCard output={output as AccountStatsOutput} />;
-    case "listDoesNotFollowBack":
+    case "listDoesNotFollowBack": {
+      const { result } = output as PaginatedListOutput;
+      const requestedOffset =
+        input && typeof input === "object" && typeof (input as { offset?: unknown }).offset === "number"
+          ? (input as { offset: number }).offset
+          : 0;
+      return (
+        <DoesNotFollowBackList
+          initialItems={result.items}
+          initialTotal={result.total}
+          nextOffset={requestedOffset + result.items.length}
+        />
+      );
+    }
     case "listMutuals":
     case "listYouDontFollowBack":
       return <AccountListCard toolName={toolName} output={output as PaginatedListOutput} />;

@@ -10,7 +10,7 @@ import { computeCurrentRelationships } from "./comparisons";
 
 export interface PaginatedResult {
   total: number;
-  items: Array<{ username: string; profileUrl: string }>;
+  items: Array<{ username: string; normalizedUsername: string; profileUrl: string }>;
   hasMore: boolean;
 }
 
@@ -18,7 +18,7 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
 function toItem(rel: Relationship) {
-  return { username: rel.displayUsername, profileUrl: rel.profileUrl };
+  return { username: rel.displayUsername, normalizedUsername: rel.normalizedUsername, profileUrl: rel.profileUrl };
 }
 
 /** Filters by a case-insensitive substring match on the username, then paginates. */

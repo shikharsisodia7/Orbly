@@ -221,6 +221,38 @@ export async function updateQueueItemStatus(id: string, status: QueueStatus): Pr
   await getDb().queueItems.update(id, { status });
 }
 
+export interface MarkAccountUnfollowedInput {
+  normalizedUsername: string;
+  displayUsername: string;
+  profileUrl: string;
+}
+
+/**
+ * Records that the user says they've already unfollowed this account
+ * outside Orbly (Orbly has no live connection to Instagram and can't
+ * detect it itself). Inserted straight into the queue as "completed" —
+ * or flips an existing pending entry to completed — so it's reflected
+ * immediately in the chat's interactive list and in the Queue page's
+ * history, without waiting for the next re-import to reconcile it.
+ */
+export async function markAccountUnfollowed(item: MarkAccountUnfollowedInput): Promise<void> {
+  const db = getDb();
+  const existing = await db.queueItems.where("normalizedUsername").equals(item.normalizedUsername).first();
+  if (existing) {
+    await db.queueItems.update(existing.id, { status: "completed" });
+    return;
+  }
+  await db.queueItems.add({
+    id: newId(),
+    normalizedUsername: item.normalizedUsername,
+    displayUsername: item.displayUsername,
+    profileUrl: item.profileUrl,
+    addedAt: new Date().toISOString(),
+    source: "does-not-follow-back",
+    status: "completed",
+  });
+}
+
 /**
  * Reconciles the queue against a freshly imported following list.
  *
