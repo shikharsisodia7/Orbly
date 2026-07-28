@@ -12,6 +12,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@ai-sdk/react": "^4.0.43",
+    "ai": "^7.0.40",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "dexie": "^4.4.4",

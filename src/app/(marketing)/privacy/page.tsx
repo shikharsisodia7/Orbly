@@ -43,8 +43,25 @@ export default function PrivacyPage() {
             When you drop your Instagram export ZIP into Orbly, it is read entirely by JavaScript
             running in your browser. The file is opened, its contents are parsed, and every
             calculation — mutuals, non-followers, snapshot comparisons — happens on your device.
-            There is no server-side upload route involved. Nothing about your follower list,
-            usernames, or profile links is ever transmitted to Orbly or any third party.
+            The import flow has no server-side upload route. Nothing about your follower list,
+            usernames, or profile links is transmitted anywhere as part of importing, viewing, or
+            managing your data.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="text-xl font-semibold text-ink">The one exception: Ask Orbly</h2>
+          <p className="mt-3">
+            The optional <strong>Ask Orbly</strong> chat feature is the single place in the app
+            where this changes. It&apos;s a separate, opt-in page — you have to go ask it a
+            question for it to do anything. When you do, whatever specific facts are needed to
+            answer (e.g. a count, a page of usernames, or whether one account follows you back)
+            are sent from your browser to Orbly&apos;s server, which forwards them to Anthropic&apos;s
+            API to generate a reply. That request isn&apos;t stored server-side — it passes through
+            for that one answer and is gone. Every other page in Orbly (Dashboard, Don&apos;t Follow
+            Back, Followers, Following, Mutuals, Unfollowers, Queue, Snapshots, Settings, and the
+            import flow itself) is completely unaffected and stays fully local, exactly as
+            described on this page.
           </p>
         </section>
 
@@ -67,6 +84,7 @@ export default function PrivacyPage() {
             <li>We never store your follower or following lists on a server.</li>
             <li>We never require an account or email address to use Orbly.</li>
             <li>We never automate actions on Instagram, including unfollowing.</li>
+            <li>We never send your data anywhere unless you open Ask Orbly and ask it a question.</li>
           </ul>
         </section>
 

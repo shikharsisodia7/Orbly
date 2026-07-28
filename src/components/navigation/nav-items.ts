@@ -9,6 +9,7 @@ import {
   ListChecks,
   HelpCircle,
   Settings,
+  Bot,
   type LucideIcon,
 } from "lucide-react";
 
@@ -21,6 +22,7 @@ export interface NavItem {
 
 export const PRIMARY_NAV_ITEMS: NavItem[] = [
   { href: "/app/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/app/chat", label: "Ask Orbly", icon: Bot },
   { href: "/app/nonfollowers", label: "Don't Follow Back", icon: UserX },
   { href: "/app/unfollowers", label: "Recent Unfollowers", icon: UserMinus },
   { href: "/app/followers", label: "Followers", icon: Users },
