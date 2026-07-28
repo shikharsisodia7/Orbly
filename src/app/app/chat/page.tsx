@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/Input";
 import { Dropzone } from "@/components/import/Dropzone";
 import { ExportWizard } from "@/components/import/ExportWizard";
 import { ProcessingStages, type ProcessingStageId } from "@/components/import/ProcessingStages";
+import { ToolResultCard } from "@/components/chat/ToolResultCard";
 import { useSnapshots } from "@/hooks/useSnapshots";
 import { parseInstagramExport } from "@/lib/instagram/parser";
 import { hashDataset } from "@/lib/instagram/hash";
@@ -324,6 +325,32 @@ export default function ChatPage() {
                       const label = getToolName(part).replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
                       const done = part.state === "output-available";
                       const errored = part.state === "output-error";
+
+                      if (done) {
+                        return (
+                          <motion.div
+                            key={index}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.25 }}
+                            className="space-y-1.5"
+                          >
+                            <div className="flex items-center gap-1.5 px-1 text-[11px] text-ink-faint">
+                              <motion.span
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                                className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-green text-white"
+                              >
+                                <Check size={9} />
+                              </motion.span>
+                              Checked {label}
+                            </div>
+                            <ToolResultCard toolName={getToolName(part)} output={part.output} />
+                          </motion.div>
+                        );
+                      }
+
                       return (
                         <motion.div
                           key={index}
@@ -339,19 +366,10 @@ export default function ChatPage() {
                         >
                           {errored ? (
                             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose" />
-                          ) : done ? (
-                            <motion.span
-                              initial={{ scale: 0 }}
-                              animate={{ scale: 1 }}
-                              transition={{ type: "spring", stiffness: 400, damping: 20 }}
-                              className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-green text-white"
-                            >
-                              <Check size={9} />
-                            </motion.span>
                           ) : (
                             <span className="h-1.5 w-1.5 shrink-0 animate-pulse-ring rounded-full bg-violet" />
                           )}
-                          {errored ? `Couldn't read ${label}: ${part.errorText}` : done ? `Checked ${label}` : `Checking ${label}…`}
+                          {errored ? `Couldn't read ${label}: ${part.errorText}` : `Checking ${label}…`}
                         </motion.div>
                       );
                     }
