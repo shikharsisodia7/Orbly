@@ -17,7 +17,6 @@ export default function SettingsPage() {
   const settings = useSettings();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
-  const [deleteAllConfirmText, setDeleteAllConfirmText] = useState("");
   const [snapshotToDelete, setSnapshotToDelete] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [restoreSuccess, setRestoreSuccess] = useState(false);
@@ -191,30 +190,16 @@ export default function SettingsPage() {
 
       <Dialog
         open={deleteAllOpen}
-        onClose={() => {
-          setDeleteAllOpen(false);
-          setDeleteAllConfirmText("");
-        }}
+        onClose={() => setDeleteAllOpen(false)}
         title="Delete all local data?"
-        description="This permanently removes your locally stored snapshots and queue from this browser."
+        description="This permanently removes every snapshot, your queue, and settings from this browser. You can always get back to where you are now by re-uploading the same Instagram export."
       >
-        <div className="flex flex-col gap-3">
-          <label className="text-xs text-ink-soft">
-            Type <strong>DELETE</strong> to confirm.
-            <input
-              value={deleteAllConfirmText}
-              onChange={(e) => setDeleteAllConfirmText(e.target.value)}
-              className="mt-1.5 w-full rounded-lg border border-border-strong px-3 py-2 text-sm"
-              autoFocus
-            />
-          </label>
+        <div className="flex flex-col gap-2">
           <Button
             variant="danger"
-            disabled={deleteAllConfirmText !== "DELETE"}
             onClick={async () => {
               await deleteAllData();
               setDeleteAllOpen(false);
-              setDeleteAllConfirmText("");
             }}
           >
             Delete Everything

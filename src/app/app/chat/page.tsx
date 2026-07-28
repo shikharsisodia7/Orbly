@@ -12,11 +12,13 @@ import { Dropzone } from "@/components/import/Dropzone";
 import { ExportWizard } from "@/components/import/ExportWizard";
 import { ProcessingStages, type ProcessingStageId } from "@/components/import/ProcessingStages";
 import { ToolResultCard } from "@/components/chat/ToolResultCard";
+import { Dialog } from "@/components/ui/Dialog";
 import { useSnapshots } from "@/hooks/useSnapshots";
 import { parseInstagramExport } from "@/lib/instagram/parser";
 import { hashDataset } from "@/lib/instagram/hash";
 import {
   createSnapshot,
+  deleteAllData,
   findSnapshotByDatasetHash,
   reconcileQueueWithFollowing,
   updateSettings,
@@ -58,7 +60,15 @@ export default function ChatPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [manualUploadOpen, setManualUploadOpen] = useState(false);
+  const [clearAllOpen, setClearAllOpen] = useState(false);
   const showUpload = loaded && (!hasData || manualUploadOpen);
+
+  async function handleClearAll() {
+    await deleteAllData();
+    setClearAllOpen(false);
+    setManualUploadOpen(false);
+    setWizardOpen(false);
+  }
 
   async function handleFile(file: File) {
     setUploadError(null);
@@ -213,13 +223,21 @@ export default function ChatPage() {
           {importStage === "upload" && (
             <>
               <Dropzone onFileSelected={handleFile} error={uploadError} />
-              <div className="text-center">
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-center">
                 <button
                   onClick={() => setWizardOpen((v) => !v)}
                   className="text-xs font-medium text-ink-soft underline underline-offset-2 hover:text-ink"
                 >
                   {wizardOpen ? "Hide the steps" : "Don't have your export yet? Show me the steps"}
                 </button>
+                {hasData && (
+                  <button
+                    onClick={() => setClearAllOpen(true)}
+                    className="text-xs font-medium text-ink-faint underline underline-offset-2 hover:text-rose"
+                  >
+                    Or clear all your data and start fresh
+                  </button>
+                )}
               </div>
               <AnimatePresence initial={false}>
                 {wizardOpen && (
@@ -429,6 +447,22 @@ export default function ChatPage() {
           </Button>
         </form>
       </div>
+
+      <Dialog
+        open={clearAllOpen}
+        onClose={() => setClearAllOpen(false)}
+        title="Clear all your data?"
+        description="This permanently removes every snapshot, your queue, and settings from this browser. You can always get back to where you are now by re-uploading the same Instagram export."
+      >
+        <div className="flex flex-col gap-2">
+          <Button variant="danger" onClick={handleClearAll}>
+            Clear Everything
+          </Button>
+          <Button variant="ghost" onClick={() => setClearAllOpen(false)}>
+            Cancel
+          </Button>
+        </div>
+      </Dialog>
     </>
   );
 }
