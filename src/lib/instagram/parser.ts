@@ -16,7 +16,7 @@ import type {
  * were created with so old, pre-fix imports can be identified and
  * re-validated rather than trusted at face value.
  */
-export const PARSER_VERSION = 2;
+export const PARSER_VERSION = 3;
 
 export const MAX_ZIP_SIZE_BYTES = 2 * 1024 * 1024 * 1024; // 2GB safety ceiling
 

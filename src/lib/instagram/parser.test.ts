@@ -238,3 +238,77 @@ describe("parseInstagramExport — following title/value conflicts", () => {
     });
   });
 });
+
+describe("parseInstagramExport — current Meta export shape (title-only, no value, _u/ href)", () => {
+  // Meta's current following.json export omits string_list_data[0].value
+  // entirely and only puts the username in `title`; the href is a redirect
+  // link shaped like "https://www.instagram.com/_u/<username>" (no trailing
+  // slash). Regression for the real reported bug: this shape collapsed every
+  // following record to a single fake "_u" user because the href parser read
+  // "_u" as the username.
+  function titleOnlyRecord(username: string, i: number) {
+    return {
+      title: username,
+      media_list_data: [],
+      string_list_data: [
+        {
+          href: `https://www.instagram.com/_u/${username}`,
+          timestamp: 1690000000 + i * 3600,
+        },
+      ],
+    };
+  }
+
+  it("parses thousands of title-only following records into distinct usernames, not one", async () => {
+    const zip = new JSZip();
+    const followingRecords = [];
+    for (let n = 0; n < 5970; n++) {
+      followingRecords.push(titleOnlyRecord(`followed_${n}`, n));
+    }
+    zip.file("following.json", JSON.stringify({ relationships_following: followingRecords }));
+    const buffer = await zip.generateAsync({ type: "arraybuffer" });
+    const result = await parseInstagramExport(buffer);
+
+    expect(result.following).toHaveLength(5970);
+    expect(result.following.map((r) => r.normalizedUsername)).not.toContain("_u");
+    expect(result.following[0].normalizedUsername).toBe("followed_0");
+    expect(result.following[0].profileUrl).toBe("https://www.instagram.com/_u/followed_0");
+  });
+
+  it("computes the correct don't-follow-back set when following uses title-only records", async () => {
+    const zip = new JSZip();
+    const followerRecords = [];
+    for (let n = 0; n < 3885; n++) {
+      followerRecords.push({
+        title: "",
+        media_list_data: [],
+        string_list_data: [
+          {
+            href: `https://www.instagram.com/followed_${n}`,
+            value: `followed_${n}`,
+            timestamp: 1690000000,
+          },
+        ],
+      });
+    }
+    zip.file("followers_1.json", JSON.stringify(followerRecords));
+
+    const followingRecords = [];
+    for (let n = 0; n < 5970; n++) {
+      followingRecords.push(titleOnlyRecord(`followed_${n}`, n));
+    }
+    zip.file("following.json", JSON.stringify({ relationships_following: followingRecords }));
+
+    const buffer = await zip.generateAsync({ type: "arraybuffer" });
+    const result = await parseInstagramExport(buffer);
+
+    expect(result.followers).toHaveLength(3885);
+    expect(result.following).toHaveLength(5970);
+
+    const { computeCurrentRelationships } = await import("./comparisons");
+    const breakdown = computeCurrentRelationships(result.followers, result.following);
+    expect(breakdown.mutuals).toHaveLength(3885);
+    expect(breakdown.doesNotFollowBack).toHaveLength(5970 - 3885);
+    expect(breakdown.youDontFollowBack).toHaveLength(0);
+  });
+});

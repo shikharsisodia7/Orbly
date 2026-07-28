@@ -66,7 +66,10 @@ export interface RecordExtractionResult {
   conflicts: ConflictingRecord[];
 }
 
-function relationshipFromStringListEntry(entry: RawStringListEntry): {
+function relationshipFromStringListEntry(
+  entry: RawStringListEntry,
+  title: unknown
+): {
   normalizedUsername: string;
   displayUsername: string;
   profileUrl: string;
@@ -80,6 +83,17 @@ function relationshipFromStringListEntry(entry: RawStringListEntry): {
     if (isPlausibleUsername(normalized)) {
       normalizedUsername = normalized;
       displayUsername = entry.value.trim().replace(/^@+/, "");
+    }
+  }
+
+  // Meta's current following.json export omits `value` entirely and only
+  // carries the username in the record's `title` field (string_list_data
+  // only has an `_u/`-style redirect href in that case).
+  if (!normalizedUsername && typeof title === "string" && title.trim().length > 0) {
+    const normalized = normalizeUsername(title);
+    if (isPlausibleUsername(normalized)) {
+      normalizedUsername = normalized;
+      displayUsername = title.trim().replace(/^@+/, "");
     }
   }
 
@@ -126,13 +140,21 @@ export function extractFromRecords(records: unknown[], fileName: string): Record
       continue;
     }
 
-    const parsed = relationshipFromStringListEntry(primaryEntry);
+    const parsed = relationshipFromStringListEntry(primaryEntry, raw.title);
     if (!parsed) {
       invalidRecords++;
       continue;
     }
 
-    if (typeof raw.title === "string" && raw.title.trim().length > 0) {
+    // Only a genuine mismatch between an explicit `value` and `title` is a
+    // conflict worth logging — when `title` itself was the source used (no
+    // `value` present), there's nothing to disagree with.
+    if (
+      typeof raw.title === "string" &&
+      raw.title.trim().length > 0 &&
+      typeof primaryEntry.value === "string" &&
+      primaryEntry.value.trim().length > 0
+    ) {
       const normalizedTitle = normalizeUsername(raw.title);
       if (isPlausibleUsername(normalizedTitle) && normalizedTitle !== parsed.normalizedUsername) {
         conflicts.push({

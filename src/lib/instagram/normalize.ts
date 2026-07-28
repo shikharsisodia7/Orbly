@@ -20,10 +20,13 @@ export function isPlausibleUsername(normalized: string): boolean {
 
 /**
  * Derives a username from an instagram.com profile URL, e.g.
- * "https://www.instagram.com/johnsmith/" -> "johnsmith"
+ * "https://www.instagram.com/johnsmith/" -> "johnsmith". Also handles the
+ * "_u/" redirect-style links Meta's newer following.json export uses
+ * (e.g. "https://www.instagram.com/_u/johnsmith"), where the real username
+ * is the segment AFTER "_u/", not "_u" itself.
  */
 export function usernameFromProfileUrl(url: string): string | null {
-  const match = url.match(/instagram\.com\/([a-zA-Z0-9._]{1,30})\/?/i);
+  const match = url.match(/instagram\.com\/(?:_u\/)?([a-zA-Z0-9._]{1,30})\/?/i);
   if (!match) return null;
   const candidate = normalizeUsername(match[1]);
   return isPlausibleUsername(candidate) ? candidate : null;
