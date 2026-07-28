@@ -53,8 +53,8 @@ export function Nav() {
         </nav>
 
         <div className="hidden md:block">
-          <ButtonLink href="/app" size="sm">
-            Analyze My Account
+          <ButtonLink href="/app/chat" size="sm" className="bg-gradient-instagram text-white hover:opacity-90">
+            Chat With Orbly
           </ButtonLink>
         </div>
 
@@ -81,8 +81,12 @@ export function Nav() {
                 {link.label}
               </Link>
             ))}
-            <ButtonLink href="/app" className="w-full" onClick={() => setMobileOpen(false)}>
-              Analyze My Account
+            <ButtonLink
+              href="/app/chat"
+              className="w-full bg-gradient-instagram text-white hover:opacity-90"
+              onClick={() => setMobileOpen(false)}
+            >
+              Chat With Orbly
             </ButtonLink>
           </nav>
         </div>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, getToolName, isToolUIPart, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bot, Send, User } from "lucide-react";
+import { Bot, Check, Send, Sparkles, User } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -249,77 +249,141 @@ export default function ChatPage() {
       <div className="flex min-h-[50vh] flex-col rounded-2xl border border-border bg-white">
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
           {messages.length === 0 && (
-            <div className="flex h-full flex-col items-center justify-center gap-3 py-10 text-center">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface text-ink-faint">
-                <Bot size={18} />
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+              className="flex h-full flex-col items-center justify-center gap-3 py-10 text-center"
+            >
+              <div className="rounded-full bg-gradient-instagram p-[2.5px]">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white">
+                  <Sparkles size={18} className="text-violet" />
+                </div>
               </div>
               <p className="max-w-xs text-sm text-ink-soft">
-                Try one of these, or ask your own question:
+                {loaded && !hasData
+                  ? "Import your export above to unlock answers about your own account — or ask me anything in the meantime."
+                  : "Try one of these, or ask your own question:"}
               </p>
               <div className="flex flex-wrap justify-center gap-2">
-                {SUGGESTIONS.map((s) => (
-                  <button
+                {SUGGESTIONS.map((s, i) => (
+                  <motion.button
                     key={s}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.06, duration: 0.25 }}
                     onClick={() => submit(s)}
-                    className="rounded-full border border-border-strong bg-white px-3 py-1.5 text-xs text-ink-soft hover:bg-surface"
+                    className="rounded-full border border-border-strong bg-white px-3 py-1.5 text-xs text-ink-soft transition-transform hover:scale-[1.03] hover:bg-surface"
                   >
                     {s}
-                  </button>
+                  </motion.button>
                 ))}
               </div>
-            </div>
+            </motion.div>
           )}
 
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={cn("flex gap-2.5", message.role === "user" ? "flex-row-reverse" : "flex-row")}
-            >
-              <div
-                className={cn(
-                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
-                  message.role === "user" ? "bg-ink text-white" : "bg-surface text-ink-faint"
-                )}
+          <AnimatePresence initial={false}>
+            {messages.map((message) => (
+              <motion.div
+                key={message.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                className={cn("flex gap-2.5", message.role === "user" ? "flex-row-reverse" : "flex-row")}
               >
-                {message.role === "user" ? <User size={13} /> : <Bot size={13} />}
-              </div>
-              <div className={cn("max-w-[80%] space-y-1.5", message.role === "user" && "items-end")}>
-                {message.parts.map((part, index) => {
-                  if (part.type === "text") {
-                    return (
-                      <div
-                        key={index}
-                        className={cn(
-                          "whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm",
-                          message.role === "user" ? "bg-ink text-white" : "bg-surface text-ink"
-                        )}
-                      >
-                        {part.text}
-                      </div>
-                    );
-                  }
-                  if (isToolUIPart(part)) {
-                    const label = getToolName(part).replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
-                    return (
-                      <div key={index} className="rounded-lg border border-border-strong px-3 py-1.5 text-xs text-ink-faint">
-                        {part.state === "output-error"
-                          ? `Couldn't read ${label}: ${part.errorText}`
-                          : part.state === "output-available"
-                            ? `Checked ${label}`
-                            : `Checking ${label}…`}
-                      </div>
-                    );
-                  }
-                  return null;
-                })}
-              </div>
-            </div>
-          ))}
+                {message.role === "user" ? (
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink text-white">
+                    <User size={13} />
+                  </div>
+                ) : (
+                  <div className="mt-0.5 shrink-0 rounded-full bg-gradient-instagram p-[2px]">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white">
+                      <Bot size={12} className="text-ink" />
+                    </div>
+                  </div>
+                )}
+                <div className={cn("max-w-[80%] space-y-1.5", message.role === "user" && "items-end")}>
+                  {message.parts.map((part, index) => {
+                    if (part.type === "text") {
+                      return (
+                        <motion.div
+                          key={index}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ duration: 0.2 }}
+                          className={cn(
+                            "whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm",
+                            message.role === "user" ? "bg-ink text-white" : "bg-surface text-ink"
+                          )}
+                        >
+                          {part.text}
+                        </motion.div>
+                      );
+                    }
+                    if (isToolUIPart(part)) {
+                      const label = getToolName(part).replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+                      const done = part.state === "output-available";
+                      const errored = part.state === "output-error";
+                      return (
+                        <motion.div
+                          key={index}
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className={cn(
+                            "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs",
+                            errored
+                              ? "border-rose/30 bg-rose-soft text-rose"
+                              : "border-border-strong bg-white text-ink-faint"
+                          )}
+                        >
+                          {errored ? (
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose" />
+                          ) : done ? (
+                            <motion.span
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                              className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-green text-white"
+                            >
+                              <Check size={9} />
+                            </motion.span>
+                          ) : (
+                            <span className="h-1.5 w-1.5 shrink-0 animate-pulse-ring rounded-full bg-violet" />
+                          )}
+                          {errored ? `Couldn't read ${label}: ${part.errorText}` : done ? `Checked ${label}` : `Checking ${label}…`}
+                        </motion.div>
+                      );
+                    }
+                    return null;
+                  })}
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
 
           {status === "submitted" && (
-            <div className="flex items-center gap-2 text-xs text-ink-faint">
-              <Bot size={13} /> Thinking…
-            </div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex items-center gap-2.5"
+            >
+              <div className="rounded-full bg-gradient-instagram p-[2px]">
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white">
+                  <Bot size={12} className="text-ink" />
+                </div>
+              </div>
+              <div className="flex items-center gap-1 rounded-2xl bg-surface px-3.5 py-2.5">
+                {[0, 1, 2].map((i) => (
+                  <motion.span
+                    key={i}
+                    className="h-1.5 w-1.5 rounded-full bg-ink-faint"
+                    animate={{ y: [0, -3, 0] }}
+                    transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }}
+                  />
+                ))}
+              </div>
+            </motion.div>
           )}
         </div>
 
@@ -337,7 +401,12 @@ export default function ChatPage() {
             disabled={busy}
             className="flex-1"
           />
-          <Button type="submit" disabled={busy || !input.trim()} aria-label="Send">
+          <Button
+            type="submit"
+            disabled={busy || !input.trim()}
+            aria-label="Send"
+            className={cn(!busy && input.trim() && "bg-gradient-instagram hover:opacity-90")}
+          >
             <Send size={15} />
           </Button>
         </form>

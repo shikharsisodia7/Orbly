@@ -28,6 +28,11 @@
   --duration-fast: 150ms;
   --duration-standard: 260ms;
   --duration-large: 480ms;
+
+  /* A restrained nod to Instagram's brand gradient — used only as small
+     accents (avatar rings, one CTA, a headline highlight), never as a
+     full-bleed background, so it stays a signature rather than noise. */
+  --gradient-instagram: linear-gradient(135deg, #4f5bd5 0%, #962fbf 28%, #d62976 52%, #fa7e1e 76%, #feda75 100%);
 }
 
 @theme inline {
@@ -104,4 +109,34 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+.bg-gradient-instagram {
+  background: var(--gradient-instagram);
+}
+
+.text-gradient-instagram {
+  background: var(--gradient-instagram);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.ring-gradient-instagram {
+  background: var(--gradient-instagram);
+  padding: 2px;
+}
+
+@keyframes orbly-pulse-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(150, 47, 191, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(150, 47, 191, 0);
+  }
+}
+
+.animate-pulse-ring {
+  animation: orbly-pulse-ring 2s ease-in-out infinite;
 }

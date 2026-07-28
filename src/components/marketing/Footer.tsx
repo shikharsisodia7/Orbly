@@ -9,7 +9,7 @@ export function Footer() {
           <div>
             <Wordmark size="sm" />
             <p className="mt-3 max-w-xs text-sm text-ink-soft">
-              Know who&apos;s really in your circle. Analyzed locally, in your browser.
+              Ask anything about your Instagram circle. Answered locally, in your browser.
             </p>
           </div>
 
@@ -25,8 +25,8 @@ export function Footer() {
                   </Link>
                 </li>
                 <li>
-                  <Link href="/app" className="text-ink-soft hover:text-ink">
-                    Analyze My Account
+                  <Link href="/app/chat" className="text-ink-soft hover:text-ink">
+                    Chat With Orbly
                   </Link>
                 </li>
                 <li>
