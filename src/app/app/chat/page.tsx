@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, getToolName, isToolUIPart, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bot, Check, Send, Sparkles, User } from "lucide-react";
+import { AlertTriangle, Bot, Check, RefreshCw, Send, Sparkles, User } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -130,9 +130,12 @@ export default function ChatPage() {
     }
   }
 
-  const { messages, sendMessage, addToolOutput, status } = useChat({
+  const { messages, sendMessage, addToolOutput, status, error, regenerate } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
+    onError: (err) => {
+      if (process.env.NODE_ENV === "development") console.error(err);
+    },
     async onToolCall({ toolCall }) {
       if (toolCall.dynamic) return;
 
@@ -193,6 +196,11 @@ export default function ChatPage() {
   });
 
   const busy = status === "submitted" || status === "streaming";
+  const scrollAnchorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages, status]);
 
   function submit(text: string) {
     const trimmed = text.trim();
@@ -265,7 +273,12 @@ export default function ChatPage() {
         anything off of it.
       </p>
 
-      <div className="flex min-h-[50vh] flex-col rounded-2xl border border-border bg-white">
+      <div className="relative">
+        <div
+          className="pointer-events-none absolute -inset-x-6 -inset-y-6 -z-10 rounded-[2rem] bg-gradient-to-br from-violet-soft via-rose-soft to-orange-soft opacity-40 blur-3xl"
+          aria-hidden
+        />
+      <div className="relative flex min-h-[50vh] flex-col rounded-2xl border border-border bg-white">
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
           {messages.length === 0 && (
             <motion.div
@@ -302,12 +315,15 @@ export default function ChatPage() {
           )}
 
           <AnimatePresence initial={false}>
-            {messages.map((message) => (
+            {messages.map((message, msgIndex) => {
+              const isActivelyStreaming =
+                status === "streaming" && msgIndex === messages.length - 1 && message.role === "assistant";
+              return (
               <motion.div
                 key={message.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ type: "spring", stiffness: 380, damping: 28 }}
                 className={cn("flex gap-2.5", message.role === "user" ? "flex-row-reverse" : "flex-row")}
               >
                 {message.role === "user" ? (
@@ -315,7 +331,12 @@ export default function ChatPage() {
                     <User size={13} />
                   </div>
                 ) : (
-                  <div className="mt-0.5 shrink-0 rounded-full bg-gradient-instagram p-[2px]">
+                  <div
+                    className={cn(
+                      "mt-0.5 shrink-0 rounded-full bg-gradient-instagram p-[2px]",
+                      isActivelyStreaming && "animate-pulse-ring"
+                    )}
+                  >
                     <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white">
                       <Bot size={12} className="text-ink" />
                     </div>
@@ -332,10 +353,18 @@ export default function ChatPage() {
                           transition={{ duration: 0.2 }}
                           className={cn(
                             "whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm",
-                            message.role === "user" ? "bg-ink text-white" : "bg-surface text-ink"
+                            message.role === "user" ? "bg-ink text-white" : "bg-surface text-ink",
+                            isActivelyStreaming && "shadow-[0_0_0_1px_rgba(150,47,191,0.15)]"
                           )}
                         >
                           {part.text}
+                          {isActivelyStreaming && (
+                            <motion.span
+                              className="ml-0.5 inline-block h-3.5 w-[3px] translate-y-0.5 rounded-full bg-violet align-middle"
+                              animate={{ opacity: [1, 0, 1] }}
+                              transition={{ duration: 0.8, repeat: Infinity, ease: "easeInOut" }}
+                            />
+                          )}
                         </motion.div>
                       );
                     }
@@ -395,7 +424,8 @@ export default function ChatPage() {
                   })}
                 </div>
               </motion.div>
-            ))}
+              );
+            })}
           </AnimatePresence>
 
           {status === "submitted" && (
@@ -409,18 +439,40 @@ export default function ChatPage() {
                   <Bot size={12} className="text-ink" />
                 </div>
               </div>
-              <div className="flex items-center gap-1 rounded-2xl bg-surface px-3.5 py-2.5">
-                {[0, 1, 2].map((i) => (
+              <div className="flex items-center gap-1.5 rounded-2xl bg-surface px-3.5 py-2.5">
+                {["#962fbf", "#d62976", "#fa7e1e"].map((color, i) => (
                   <motion.span
-                    key={i}
-                    className="h-1.5 w-1.5 rounded-full bg-ink-faint"
-                    animate={{ y: [0, -3, 0] }}
-                    transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }}
+                    key={color}
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: color }}
+                    animate={{ y: [0, -4, 0], opacity: [0.5, 1, 0.5] }}
+                    transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }}
                   />
                 ))}
               </div>
             </motion.div>
           )}
+
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-start gap-2.5 rounded-2xl border border-rose/30 bg-rose-soft/60 px-3.5 py-3 text-sm text-rose"
+            >
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <p>Something went wrong reaching Orbly&apos;s AI. Your data is untouched — just a network or API hiccup.</p>
+                <button
+                  onClick={() => regenerate()}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-rose/30 bg-white px-2.5 py-1 text-xs font-medium text-rose hover:bg-rose-soft"
+                >
+                  <RefreshCw size={12} /> Try again
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          <div ref={scrollAnchorRef} />
         </div>
 
         <form
@@ -446,6 +498,7 @@ export default function ChatPage() {
             <Send size={15} />
           </Button>
         </form>
+      </div>
       </div>
 
       <Dialog

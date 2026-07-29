@@ -99,7 +99,7 @@ export function DoesNotFollowBackList({ initialItems, initialTotal }: DoesNotFol
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 24, height: 0, marginBottom: 0 }}
               transition={{ duration: 0.25 }}
-              className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-surface"
+              className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-all hover:translate-x-0.5 hover:bg-surface"
             >
               <Avatar username={item.username} size={26} />
               <a

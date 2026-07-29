@@ -145,7 +145,7 @@ function AccountListCard({ toolName, output }: { toolName: string; output: Pagin
             variants={staggerItem}
             initial="hidden"
             animate="show"
-            className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-surface"
+            className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-all hover:translate-x-0.5 hover:bg-surface"
           >
             <Avatar username={item.username} size={26} />
             <span className="flex-1 truncate text-sm text-ink">@{item.username}</span>
@@ -238,7 +238,7 @@ function RecentUnfollowersCard({ output }: { output: RecentUnfollowersOutput }) 
           variants={staggerItem}
           initial="hidden"
           animate="show"
-          className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-surface"
+          className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-all hover:translate-x-0.5 hover:bg-surface"
         >
           <Avatar username={e.username} size={26} />
           <div className="min-w-0 flex-1">
