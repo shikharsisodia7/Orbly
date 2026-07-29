@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ExternalLink, Loader2, UserMinus, UserX } from "lucide-react";
+import { Check, ExternalLink, Loader2, UserX } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { AnimatedCounter } from "@/components/motion/AnimatedCounter";
 import { formatCount } from "@/lib/utils/format";
@@ -21,12 +21,13 @@ interface DoesNotFollowBackListProps {
 }
 
 /**
- * The interactive version of the doesn't-follow-back list: marking an
- * account as "unfollowed" removes it and pulls in the next one from the
- * full list, so working through the whole list feels like a continuous
- * queue rather than a single fixed page. Orbly has no live connection to
- * Instagram — this records what the user says they've done, the same way
- * the existing manual Unfollow Queue always has.
+ * The interactive version of the doesn't-follow-back list: clicking an
+ * account opens its Instagram profile in a new tab AND marks it handled in
+ * the same click, removing it and pulling in the next one from the full
+ * list — so working through the list is a single click per account, not
+ * two. Orbly has no live connection to Instagram — this records what the
+ * user says they've done (by clicking through to check), the same way the
+ * existing manual Unfollow Queue always has.
  *
  * Replenishment fetches use an `after: <last visible username>` cursor
  * rather than a numeric offset. listDoesNotFollowBack already excludes
@@ -91,55 +92,40 @@ export function DoesNotFollowBackList({ initialItems, initialTotal }: DoesNotFol
       </div>
       <div className="space-y-1">
         <AnimatePresence initial={false}>
-          {items.map((item) => (
-            <motion.div
-              key={item.normalizedUsername}
-              layout
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 24, height: 0, marginBottom: 0 }}
-              transition={{ duration: 0.25 }}
-              className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-all hover:translate-x-0.5 hover:bg-surface"
-            >
-              <Avatar username={item.username} size={26} />
-              <a
+          {items.map((item) => {
+            const loading = loadingUsername === item.normalizedUsername;
+            return (
+              <motion.a
+                key={item.normalizedUsername}
                 href={item.profileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 truncate text-sm text-ink hover:underline"
-              >
-                @{item.username}
-              </a>
-              <a
-                href={item.profileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="shrink-0 text-ink-faint"
-                aria-label={`Open @${item.username}'s profile`}
-              >
-                <ExternalLink size={12} />
-              </a>
-              <button
                 onClick={() => handleUnfollowed(item)}
-                disabled={loadingUsername === item.normalizedUsername}
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-faint hover:bg-rose-soft hover:text-rose disabled:opacity-50"
-                aria-label={`Mark @${item.username} as unfollowed`}
-                title="I've unfollowed them on Instagram"
+                aria-label={`Open @${item.username}'s profile and mark them as unfollowed`}
+                title="Opens their profile — marks them as unfollowed and removes them from this list"
+                layout
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 24, height: 0, marginBottom: 0 }}
+                transition={{ duration: 0.25 }}
+                className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition-all hover:translate-x-0.5 hover:bg-surface"
               >
-                {loadingUsername === item.normalizedUsername ? (
-                  <Loader2 size={12} className="animate-spin" />
+                <Avatar username={item.username} size={26} />
+                <span className="flex-1 truncate text-sm text-ink">@{item.username}</span>
+                {loading ? (
+                  <Loader2 size={13} className="shrink-0 animate-spin text-ink-faint" />
                 ) : (
-                  <UserMinus size={12} />
+                  <ExternalLink size={13} className="shrink-0 text-ink-faint" />
                 )}
-              </button>
-            </motion.div>
-          ))}
+              </motion.a>
+            );
+          })}
         </AnimatePresence>
       </div>
       {handledCount > 0 && (
         <p className="px-1 pt-1 text-[11px] text-ink-faint">
-          {formatCount(handledCount)} marked unfollowed this session — tap{" "}
-          <UserMinus size={9} className="inline" /> once you&apos;ve actually unfollowed someone on Instagram.
+          {formatCount(handledCount)} marked unfollowed this session — clicking an account opens its
+          profile and marks it handled in one go.
         </p>
       )}
     </div>
