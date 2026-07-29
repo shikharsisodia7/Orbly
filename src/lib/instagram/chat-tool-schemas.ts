@@ -51,7 +51,7 @@ export const CHAT_TOOL_DESCRIPTIONS = {
   listYouDontFollowBack:
     "List accounts that follow the user but the user doesn't follow back (Followers minus Following), optionally filtered by a username substring, paginated.",
   checkAccount:
-    "Check whether a specific username follows the user and/or the user follows that username, based on the latest snapshot.",
+    "Check whether a specific username follows the user and/or the user follows that username, based on the latest snapshot. Also returns the Unix timestamp Meta recorded for each direction of the relationship (when available) — i.e. roughly when that follow happened — as followsYouSinceTimestamp / youFollowSinceTimestamp. Null when Meta didn't record one; never estimate or invent a date if it's null.",
   listRecentUnfollowers:
     "List people who used to follow the user but no longer do, detected by comparing consecutive imported snapshots over time. Requires at least two usable snapshots — if there's only one, this returns an explanation instead of data.",
   listSnapshots:

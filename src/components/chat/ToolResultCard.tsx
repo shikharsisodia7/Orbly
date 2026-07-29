@@ -167,9 +167,11 @@ interface CheckAccountOutput {
   normalizedUsername: string;
   followsYou: boolean;
   youFollow: boolean;
+  followsYouSinceTimestamp: number | null;
+  youFollowSinceTimestamp: number | null;
 }
 
-function StatusPill({ label, value }: { label: string; value: boolean }) {
+function StatusPill({ label, value, sinceTimestamp }: { label: string; value: boolean; sinceTimestamp: number | null }) {
   return (
     <div className="flex items-center gap-2 rounded-lg border border-border bg-white px-3 py-2">
       <span
@@ -179,7 +181,14 @@ function StatusPill({ label, value }: { label: string; value: boolean }) {
       >
         {value ? <Check size={11} /> : <X size={11} />}
       </span>
-      <span className="text-sm text-ink">{label}</span>
+      <div className="flex-1">
+        <span className="text-sm text-ink">{label}</span>
+        {value && sinceTimestamp != null && (
+          <span className="block text-[11px] text-ink-faint">
+            since {new Date(sinceTimestamp * 1000).toLocaleDateString()}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -196,8 +205,8 @@ function CheckAccountCard({ output }: { output: CheckAccountOutput }) {
         <Avatar username={output.normalizedUsername} size={32} />
         <span className="font-medium text-ink">@{output.normalizedUsername}</span>
       </div>
-      <StatusPill label="Follows you" value={output.followsYou} />
-      <StatusPill label="You follow them" value={output.youFollow} />
+      <StatusPill label="Follows you" value={output.followsYou} sinceTimestamp={output.followsYouSinceTimestamp} />
+      <StatusPill label="You follow them" value={output.youFollow} sinceTimestamp={output.youFollowSinceTimestamp} />
     </motion.div>
   );
 }

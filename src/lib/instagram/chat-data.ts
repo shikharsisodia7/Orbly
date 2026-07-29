@@ -81,6 +81,9 @@ export interface AccountLookupResult {
   normalizedUsername: string;
   followsYou: boolean;
   youFollow: boolean;
+  /** Unix seconds from the export, if Meta provided one for this relationship. Never fabricated. */
+  followsYouSinceTimestamp: number | null;
+  youFollowSinceTimestamp: number | null;
 }
 
 /** Looks up a single username's relationship status against both sets. Never guesses at accounts absent from both. */
@@ -90,11 +93,13 @@ export function lookupAccount(
   rawUsername: string
 ): AccountLookupResult {
   const normalized = rawUsername.trim().replace(/^@+/, "").toLowerCase();
-  const followerSet = new Set(followers.map((r) => r.normalizedUsername));
-  const followingSet = new Set(following.map((r) => r.normalizedUsername));
+  const followerRecord = followers.find((r) => r.normalizedUsername === normalized);
+  const followingRecord = following.find((r) => r.normalizedUsername === normalized);
   return {
     normalizedUsername: normalized,
-    followsYou: followerSet.has(normalized),
-    youFollow: followingSet.has(normalized),
+    followsYou: !!followerRecord,
+    youFollow: !!followingRecord,
+    followsYouSinceTimestamp: followerRecord?.timestamp ?? null,
+    youFollowSinceTimestamp: followingRecord?.timestamp ?? null,
   };
 }

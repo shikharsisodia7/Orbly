@@ -130,6 +130,7 @@ export default function ChatPage() {
     }
   }
 
+  const autoRetriedRef = useRef(false);
   const { messages, sendMessage, addToolOutput, status, error, regenerate } = useChat({
     transport: new DefaultChatTransport({ api: "/api/chat" }),
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
@@ -202,9 +203,34 @@ export default function ChatPage() {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, status]);
 
+  const [autoRetrying, setAutoRetrying] = useState(false);
+
+  // The AI SDK already retries a transient failure twice on the server
+  // before useChat's error ever surfaces here. This covers the next layer
+  // up — a one-off blip between the browser and our own server — with one
+  // automatic retry (shown as a calm "reconnecting" state, not the full
+  // error). If it fails a second time, stop retrying and show the real
+  // error + manual "Try again" button, so a genuine persistent problem
+  // never loops forever without telling anyone.
+  useEffect(() => {
+    if (error && !autoRetriedRef.current) {
+      autoRetriedRef.current = true;
+      setAutoRetrying(true);
+      const timer = setTimeout(() => {
+        regenerate();
+        setAutoRetrying(false);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+    if (!error) {
+      autoRetriedRef.current = false;
+    }
+  }, [error, regenerate]);
+
   function submit(text: string) {
     const trimmed = text.trim();
     if (!trimmed || busy) return;
+    autoRetriedRef.current = false;
     sendMessage({ text: trimmed });
     setInput("");
   }
@@ -453,7 +479,18 @@ export default function ChatPage() {
             </motion.div>
           )}
 
-          {error && (
+          {error && autoRetrying && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2.5 rounded-2xl border border-border bg-surface px-3.5 py-3 text-sm text-ink-soft"
+            >
+              <RefreshCw size={14} className="shrink-0 animate-spin" />
+              Reconnecting…
+            </motion.div>
+          )}
+
+          {error && !autoRetrying && (
             <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -461,9 +498,12 @@ export default function ChatPage() {
             >
               <AlertTriangle size={16} className="mt-0.5 shrink-0" />
               <div className="flex-1">
-                <p>Something went wrong reaching Orbly&apos;s AI. Your data is untouched — just a network or API hiccup.</p>
+                <p>Something went wrong reaching Orbly&apos;s AI after retrying. Your data is untouched — just a network or API hiccup.</p>
                 <button
-                  onClick={() => regenerate()}
+                  onClick={() => {
+                    autoRetriedRef.current = false;
+                    regenerate();
+                  }}
                   className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-rose/30 bg-white px-2.5 py-1 text-xs font-medium text-rose hover:bg-rose-soft"
                 >
                   <RefreshCw size={12} /> Try again

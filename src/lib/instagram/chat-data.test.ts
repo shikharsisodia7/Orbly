@@ -37,6 +37,8 @@ describe("lookupAccount", () => {
       normalizedUsername: "alice",
       followsYou: true,
       youFollow: true,
+      followsYouSinceTimestamp: null,
+      youFollowSinceTimestamp: null,
     });
   });
 
@@ -45,6 +47,8 @@ describe("lookupAccount", () => {
       normalizedUsername: "charlie",
       followsYou: false,
       youFollow: true,
+      followsYouSinceTimestamp: null,
+      youFollowSinceTimestamp: null,
     });
   });
 
@@ -53,6 +57,8 @@ describe("lookupAccount", () => {
       normalizedUsername: "bob",
       followsYou: true,
       youFollow: false,
+      followsYouSinceTimestamp: null,
+      youFollowSinceTimestamp: null,
     });
   });
 
@@ -61,7 +67,23 @@ describe("lookupAccount", () => {
       normalizedUsername: "nobody",
       followsYou: false,
       youFollow: false,
+      followsYouSinceTimestamp: null,
+      youFollowSinceTimestamp: null,
     });
+  });
+
+  it("surfaces each direction's real timestamp from the export, independently", () => {
+    const timedFollowers: Relationship[] = [{ ...rel("dana"), timestamp: 1700000000 }];
+    const timedFollowing: Relationship[] = [{ ...rel("dana"), timestamp: 1750000000 }];
+    const result = lookupAccount(timedFollowers, timedFollowing, "dana");
+    expect(result.followsYouSinceTimestamp).toBe(1700000000);
+    expect(result.youFollowSinceTimestamp).toBe(1750000000);
+  });
+
+  it("never fabricates a timestamp for a relationship the export didn't provide one for", () => {
+    const result = lookupAccount(followers, following, "alice");
+    expect(result.followsYouSinceTimestamp).toBeNull();
+    expect(result.youFollowSinceTimestamp).toBeNull();
   });
 });
 
