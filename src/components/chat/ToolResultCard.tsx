@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Check, Download, ExternalLink, FileSpreadsheet, History, ListChecks, UploadCloud, UserCheck, UserMinus, UserPlus, UserX, Users, X } from "lucide-react";
+import { Check, Download, ExternalLink, FileSpreadsheet, History, ListChecks, Shield, ShieldOff, UploadCloud, UserCheck, UserMinus, UserPlus, UserX, Users, X } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { AnimatedCounter } from "@/components/motion/AnimatedCounter";
 import { ValidityBadge } from "@/components/ui/ValidityBadge";
@@ -391,6 +391,90 @@ function ExportCSVCard({ output }: { output: ExportListAsCSVOutput }) {
   );
 }
 
+interface ProtectAccountOutput {
+  available: true;
+  normalizedUsername: string;
+  label: string | null;
+  dateAdded: string;
+}
+
+function ProtectAccountCard({ output }: { output: ProtectAccountOutput }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-border bg-white px-4 py-3.5 text-sm text-ink-soft">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-green-soft text-green">
+        <Shield size={14} />
+      </div>
+      <span>
+        @{output.normalizedUsername} is now protected{output.label ? ` — tagged "${output.label}"` : ""}. It won&apos;t
+        appear in unfollow suggestions, the queue, or exports.
+      </span>
+    </div>
+  );
+}
+
+interface UnprotectAccountOutput {
+  available: true;
+  normalizedUsername: string;
+  wasProtected: boolean;
+}
+
+function UnprotectAccountCard({ output }: { output: UnprotectAccountOutput }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-border bg-white px-4 py-3.5 text-sm text-ink-soft">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-ink-faint">
+        <ShieldOff size={14} />
+      </div>
+      {output.wasProtected
+        ? `@${output.normalizedUsername} is no longer protected — it can show up in suggestions again.`
+        : `@${output.normalizedUsername} wasn't protected, so there was nothing to remove.`}
+    </div>
+  );
+}
+
+interface ProtectedAccountsOutput {
+  available: true;
+  total: number;
+  accounts: { username: string; normalizedUsername: string; label: string | null; dateAdded: string }[];
+}
+
+function ProtectedAccountsCard({ output }: { output: ProtectedAccountsOutput }) {
+  if (output.accounts.length === 0) {
+    return (
+      <div className="rounded-2xl border border-border bg-white px-4 py-6 text-center text-sm text-ink-soft">
+        No accounts protected yet.
+      </div>
+    );
+  }
+  return (
+    <div className="w-full max-w-sm space-y-2 rounded-2xl border border-border bg-white p-3">
+      <div className="flex items-center gap-1.5 px-1 text-xs font-medium text-green">
+        <Shield size={13} />
+        <AnimatedCounter value={output.total} /> protected account{output.total === 1 ? "" : "s"}
+      </div>
+      <div className="space-y-1">
+        {output.accounts.map((a, i) => (
+          <motion.div
+            key={a.normalizedUsername}
+            custom={i}
+            variants={staggerItem}
+            initial="hidden"
+            animate="show"
+            className="flex items-center gap-2.5 rounded-lg px-2 py-1.5"
+          >
+            <Avatar username={a.username} size={26} />
+            <span className="flex-1 truncate text-sm text-ink">@{a.username}</span>
+            {a.label && (
+              <span className="shrink-0 rounded-full bg-green-soft px-2 py-0.5 text-[10px] font-medium text-green">
+                {a.label}
+              </span>
+            )}
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ToolResultCard({ toolName, output }: { toolName: string; output: unknown }) {
   if (isUnavailable(output)) return <UnavailableCard />;
   if (!output || typeof output !== "object") return null;
@@ -415,6 +499,12 @@ export function ToolResultCard({ toolName, output }: { toolName: string; output:
       return <QueueStatusCard output={output as QueueStatusOutput} />;
     case "exportListAsCSV":
       return <ExportCSVCard output={output as ExportListAsCSVOutput} />;
+    case "protectAccount":
+      return <ProtectAccountCard output={output as ProtectAccountOutput} />;
+    case "unprotectAccount":
+      return <UnprotectAccountCard output={output as UnprotectAccountOutput} />;
+    case "listProtectedAccounts":
+      return <ProtectedAccountsCard output={output as ProtectedAccountsOutput} />;
     default:
       return null;
   }

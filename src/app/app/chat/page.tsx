@@ -30,15 +30,21 @@ import {
   getQueueStatus,
   listDoesNotFollowBack,
   listMutuals,
+  listProtectedAccounts,
   listRecentUnfollowers,
   listSnapshots,
   listYouDontFollowBack,
+  protectAccount,
+  unprotectAccount,
 } from "@/lib/instagram/chat-tools";
 import {
   checkAccountInputSchema,
+  doesNotFollowBackInputSchema,
   exportListAsCSVInputSchema,
   listRecentUnfollowersInputSchema,
   paginatedListInputSchema,
+  protectAccountInputSchema,
+  unprotectAccountInputSchema,
 } from "@/lib/instagram/chat-tool-schemas";
 import { cn } from "@/lib/utils/cn";
 
@@ -150,7 +156,7 @@ export default function ChatPage() {
             return;
           }
           case "listDoesNotFollowBack": {
-            const output = await listDoesNotFollowBack(paginatedListInputSchema.parse(toolCall.input));
+            const output = await listDoesNotFollowBack(doesNotFollowBackInputSchema.parse(toolCall.input));
             addToolOutput({ tool: "listDoesNotFollowBack", toolCallId: toolCall.toolCallId, output });
             return;
           }
@@ -189,6 +195,21 @@ export default function ChatPage() {
           case "exportListAsCSV": {
             const output = await exportListAsCSV(exportListAsCSVInputSchema.parse(toolCall.input));
             addToolOutput({ tool: "exportListAsCSV", toolCallId: toolCall.toolCallId, output });
+            return;
+          }
+          case "protectAccount": {
+            const output = await protectAccount(protectAccountInputSchema.parse(toolCall.input));
+            addToolOutput({ tool: "protectAccount", toolCallId: toolCall.toolCallId, output });
+            return;
+          }
+          case "unprotectAccount": {
+            const output = await unprotectAccount(unprotectAccountInputSchema.parse(toolCall.input));
+            addToolOutput({ tool: "unprotectAccount", toolCallId: toolCall.toolCallId, output });
+            return;
+          }
+          case "listProtectedAccounts": {
+            const output = await listProtectedAccounts();
+            addToolOutput({ tool: "listProtectedAccounts", toolCallId: toolCall.toolCallId, output });
             return;
           }
         }

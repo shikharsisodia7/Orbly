@@ -1,6 +1,23 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createSnapshot, deleteAllData, markAccountUnfollowed } from "@/lib/db/queries";
-import { exportListAsCSV, getAccountStats, listDoesNotFollowBack, listMutuals } from "./chat-tools";
+import {
+  addManyToQueue,
+  createSnapshot,
+  deleteAllData,
+  getQueueItems,
+  markAccountUnfollowed,
+  protectAccount as dbProtectAccount,
+  updateQueueItemStatus,
+} from "@/lib/db/queries";
+import {
+  exportListAsCSV,
+  getAccountStats,
+  listDoesNotFollowBack,
+  listMutuals,
+  listProtectedAccounts,
+  listRecentUnfollowers,
+  protectAccount,
+  unprotectAccount,
+} from "./chat-tools";
 import type { Relationship } from "./types";
 
 function rel(username: string): Relationship {
@@ -60,6 +77,83 @@ describe("listDoesNotFollowBack — resolved-queue exclusion", () => {
     // "alice" is a genuine mutual and marking her unfollowed in the queue
     // (a does-not-follow-back concept) must not remove her from here.
     expect(mutuals.result.items.map((i) => i.username).sort()).toEqual(["alice", "dave"]);
+  });
+});
+
+describe("listDoesNotFollowBack — persists resolved state across re-imports", () => {
+  it("keeps a completed account excluded after importing a second and third snapshot", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob"), rel("charlie")],
+      datasetHash: "reimport-1",
+      originalFileName: null,
+    });
+    await markAccountUnfollowed({
+      normalizedUsername: "bob",
+      displayUsername: "bob",
+      profileUrl: "https://www.instagram.com/bob/",
+    });
+
+    // Re-import: bob is still in the raw export (user never actually
+    // unfollowed on Instagram, just told Orbly they handled it), plus a
+    // brand new account dave who also doesn't follow back.
+    await new Promise((r) => setTimeout(r, 5));
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob"), rel("charlie"), rel("dave")],
+      datasetHash: "reimport-2",
+      originalFileName: null,
+    });
+
+    const afterSecondImport = await listDoesNotFollowBack({});
+    if (!afterSecondImport.available) throw new Error("expected data to be available");
+    expect(afterSecondImport.result.items.map((i) => i.username).sort()).toEqual(["charlie", "dave"]);
+
+    // A third import — bob must still never resurface.
+    await new Promise((r) => setTimeout(r, 5));
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob"), rel("charlie"), rel("dave")],
+      datasetHash: "reimport-3",
+      originalFileName: null,
+    });
+    const afterThirdImport = await listDoesNotFollowBack({});
+    if (!afterThirdImport.available) throw new Error("expected data to be available");
+    expect(afterThirdImport.result.items.map((i) => i.username).sort()).toEqual(["charlie", "dave"]);
+  });
+
+  it("excludes a skipped account the same as a completed one, and keeps it excluded across re-imports", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob"), rel("charlie")],
+      datasetHash: "skip-1",
+      originalFileName: null,
+    });
+    await addManyToQueue([
+      {
+        normalizedUsername: "bob",
+        displayUsername: "bob",
+        profileUrl: "https://www.instagram.com/bob/",
+        source: "does-not-follow-back",
+      },
+    ]);
+    const [queued] = await getQueueItems();
+    await updateQueueItemStatus(queued.id, "skipped");
+
+    const before = await listDoesNotFollowBack({});
+    if (!before.available) throw new Error("expected data to be available");
+    expect(before.result.items.map((i) => i.username)).toEqual(["charlie"]);
+
+    await new Promise((r) => setTimeout(r, 5));
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob"), rel("charlie")],
+      datasetHash: "skip-2",
+      originalFileName: null,
+    });
+    const after = await listDoesNotFollowBack({});
+    if (!after.available) throw new Error("expected data to be available");
+    expect(after.result.items.map((i) => i.username)).toEqual(["charlie"]);
   });
 });
 
@@ -172,5 +266,128 @@ describe("exportListAsCSV", () => {
 
     const result = await exportListAsCSV({ listType: "lostFollowers" });
     expect(result.available).toBe(false);
+  });
+});
+
+describe("protectAccount / unprotectAccount / listProtectedAccounts", () => {
+  it("protects, lists, and unprotects an account by username", async () => {
+    const protectResult = await protectAccount({ username: "@Alice", label: "close friend" });
+    expect(protectResult).toMatchObject({ normalizedUsername: "alice", label: "close friend" });
+
+    const list = await listProtectedAccounts();
+    expect(list.total).toBe(1);
+    expect(list.accounts[0]).toMatchObject({ normalizedUsername: "alice", label: "close friend" });
+
+    const unprotectResult = await unprotectAccount({ username: "alice" });
+    expect(unprotectResult).toMatchObject({ normalizedUsername: "alice", wasProtected: true });
+    expect((await listProtectedAccounts()).total).toBe(0);
+  });
+});
+
+describe("listDoesNotFollowBack — protected-account exclusion", () => {
+  it("excludes a protected account by default, but includes it when includeProtected is set", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob"), rel("charlie")],
+      datasetHash: "protect-1",
+      originalFileName: null,
+    });
+    await dbProtectAccount({
+      normalizedUsername: "bob",
+      displayUsername: "bob",
+      profileUrl: "https://www.instagram.com/bob/",
+      label: "verified",
+    });
+
+    const defaultResult = await listDoesNotFollowBack({});
+    if (!defaultResult.available) throw new Error("expected data to be available");
+    expect(defaultResult.result.items.map((i) => i.username)).toEqual(["charlie"]);
+
+    const includingProtected = await listDoesNotFollowBack({ includeProtected: true });
+    if (!includingProtected.available) throw new Error("expected data to be available");
+    expect(includingProtected.result.items.map((i) => i.username).sort()).toEqual(["bob", "charlie"]);
+  });
+
+  it("keeps a protected account excluded across a fresh snapshot import", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob")],
+      datasetHash: "protect-2a",
+      originalFileName: null,
+    });
+    await dbProtectAccount({
+      normalizedUsername: "bob",
+      displayUsername: "bob",
+      profileUrl: "https://www.instagram.com/bob/",
+    });
+
+    await new Promise((r) => setTimeout(r, 5));
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob"), rel("charlie")],
+      datasetHash: "protect-2b",
+      originalFileName: null,
+    });
+
+    const result = await listDoesNotFollowBack({});
+    if (!result.available) throw new Error("expected data to be available");
+    expect(result.result.items.map((i) => i.username)).toEqual(["charlie"]);
+  });
+});
+
+describe("exportListAsCSV — protected-account exclusion", () => {
+  it("excludes protected accounts from a notFollowingBack export by default", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob"), rel("charlie")],
+      datasetHash: "protect-csv-1",
+      originalFileName: null,
+    });
+    await dbProtectAccount({
+      normalizedUsername: "bob",
+      displayUsername: "bob",
+      profileUrl: "https://www.instagram.com/bob/",
+    });
+
+    const result = await exportListAsCSV({ listType: "notFollowingBack" });
+    if (!result.available) throw new Error("expected data to be available");
+    expect(result.rowCount).toBe(1);
+    expect(result.csv).not.toContain("bob");
+
+    const includingProtected = await exportListAsCSV({ listType: "notFollowingBack", includeProtected: true });
+    if (!includingProtected.available) throw new Error("expected data to be available");
+    expect(includingProtected.rowCount).toBe(2);
+    expect(includingProtected.csv).toContain("bob");
+  });
+});
+
+describe("listRecentUnfollowers — protected-account exclusion", () => {
+  it("excludes a protected account from lost-follower events by default, but includes it on request", async () => {
+    await createSnapshot({
+      followers: [rel("alice"), rel("bob")],
+      following: [rel("alice")],
+      datasetHash: "protect-ru-1",
+      originalFileName: null,
+    });
+    await new Promise((r) => setTimeout(r, 5));
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice")],
+      datasetHash: "protect-ru-2",
+      originalFileName: null,
+    });
+    await dbProtectAccount({
+      normalizedUsername: "bob",
+      displayUsername: "bob",
+      profileUrl: "https://www.instagram.com/bob/",
+    });
+
+    const defaultResult = await listRecentUnfollowers({});
+    if (!defaultResult.available) throw new Error("expected data to be available");
+    expect(defaultResult.events).toHaveLength(0);
+
+    const includingProtected = await listRecentUnfollowers({ includeProtected: true });
+    if (!includingProtected.available) throw new Error("expected data to be available");
+    expect(includingProtected.events.map((e) => e.username)).toEqual(["bob"]);
   });
 });

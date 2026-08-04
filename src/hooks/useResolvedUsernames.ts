@@ -4,18 +4,18 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { getDb } from "@/lib/db";
 
 /**
- * Usernames the user has already acted on via the queue (marked Done).
- *
- * These are hidden from the active "doesn't follow you back" view: the user has
- * unfollowed them, but the current snapshot was taken before that happened, so
- * the raw export still lists them. They reappear correctly — or drop out for
- * good — on the next import.
+ * Usernames the user has already acted on via the queue — marked Done
+ * (completed) or Skip (skipped). Both are terminal decisions the user made
+ * about that account, so both stay hidden from the active "doesn't follow
+ * you back" view, keyed on username alone rather than the snapshot that
+ * produced the suggestion — this holds across every future re-import, not
+ * just until the next one.
  */
 export function useResolvedUsernames(): Set<string> {
   const result = useLiveQuery(async () => {
     if (typeof window === "undefined") return undefined;
-    const completed = await getDb().queueItems.where("status").equals("completed").toArray();
-    return new Set(completed.map((item) => item.normalizedUsername));
+    const resolved = await getDb().queueItems.where("status").anyOf(["completed", "skipped"]).toArray();
+    return new Set(resolved.map((item) => item.normalizedUsername));
   }, []);
   return result ?? new Set();
 }

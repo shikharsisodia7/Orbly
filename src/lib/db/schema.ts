@@ -67,4 +67,20 @@ export interface SettingsRecord {
   reducedMotionOverride: "system" | "reduced" | "full";
 }
 
-export const SCHEMA_VERSION = 2;
+/**
+ * An account the user has permanently excluded from unfollow-relevant
+ * suggestions (doesNotFollowBack, recent unfollowers, the queue, CSV
+ * exports). Not tied to any snapshotId — like queueItems, it's keyed on
+ * username alone so protection survives every future re-import.
+ */
+export interface ProtectedAccountRecord {
+  id: string;
+  normalizedUsername: string;
+  displayUsername: string;
+  profileUrl: string;
+  /** Freeform user-chosen tag, e.g. "verified", "brand/venue", "close friend". Never inferred. */
+  label: string | null;
+  dateAdded: string; // ISO timestamp
+}
+
+export const SCHEMA_VERSION = 3;

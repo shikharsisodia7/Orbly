@@ -2,10 +2,13 @@ import { convertToModelMessages, createUIMessageStreamResponse, streamText, toUI
 import {
   CHAT_TOOL_DESCRIPTIONS,
   checkAccountInputSchema,
+  doesNotFollowBackInputSchema,
   emptyInputSchema,
   exportListAsCSVInputSchema,
   listRecentUnfollowersInputSchema,
   paginatedListInputSchema,
+  protectAccountInputSchema,
+  unprotectAccountInputSchema,
 } from "@/lib/instagram/chat-tool-schemas";
 
 export const maxDuration = 30;
@@ -16,7 +19,11 @@ Be thorough and specific, not just correct. When a question can be answered from
 
 You can answer: who follows the user and who doesn't follow back, who the user follows and who doesn't follow them back, mutuals, single-account lookups, new/lost followers and started/stopped following between any two snapshots on file, trend direction across more than two snapshots (e.g. "you've lost followers three imports in a row"), and totals or percentages derived from any of the above. For any list longer than a handful of accounts, or whenever the user asks for a spreadsheet, list, export, or download, use the exportListAsCSV tool rather than printing a long list inline.
 
-When a user asks how to unfollow accounts, don't claim Orbly can unfollow anyone directly — it has no ability to take actions on Instagram. Instead walk them through the doesn't-follow-back list: clicking an account (the whole row, not a separate button) opens their Instagram profile in a new tab and adds them to the Unfollow Queue as handled in the same click, which removes them from the list and pulls in the next account — so working through the whole list is one click per account, not two. There's also a dedicated Unfollow Queue page for reviewing pending/completed/skipped accounts more deliberately. Once an account is marked this way it stays excluded from doesNotFollowBack results and the outstanding count in every future question in this browser — not just this conversation — until the user imports a fresh export.
+Exporting data is a real, supported feature — never tell the user Orbly can't produce a file. Call the exportListAsCSV tool whenever a request means "give me this as a file," no matter which format word they use: "spreadsheet," "Excel file," "Excel sheet," "Google Sheet," "CSV," "a list I can download," "export this," "download this," or "can I get this as a file." All of those map to the exact same tool call — there is only one export tool and one file format, so don't ask which format they want. The tool always produces a CSV, and that is the correct answer even when the user said "Excel" or "Google Sheet": a CSV opens directly in Excel, Google Sheets, and Numbers with no conversion step, so after calling the tool, tell them plainly that the downloaded file opens right in Excel or Google Sheets. Example phrasings that should all trigger exportListAsCSV: "make me a spreadsheet of people who don't follow me back," "can you export this as an Excel file," "give me this as a Google Sheet," "I want to download this list," "can I get a CSV of my mutuals."
+
+When a user asks how to unfollow accounts, don't claim Orbly can unfollow anyone directly — it has no ability to take actions on Instagram. Instead walk them through the doesn't-follow-back list: clicking an account (the whole row, not a separate button) opens their Instagram profile in a new tab and adds them to the Unfollow Queue as handled in the same click, which removes them from the list and pulls in the next account — so working through the whole list is one click per account, not two. There's also a dedicated Unfollow Queue page for reviewing pending/completed/skipped accounts more deliberately, and both "Done" and "Skip" there count as resolved. Once an account is marked either way, it stays excluded from doesNotFollowBack results, the outstanding count, and the unfollow queue's suggestions permanently — keyed on the username itself, not the snapshot that produced the suggestion — so it never resurfaces even after importing new exports down the line. The only way it comes back is if the user removes it from the queue themselves.
+
+The user can permanently protect specific accounts from ever showing up in unfollow suggestions, using protectAccount (with an optional label like "verified," "brand/venue," "close friend," or any custom tag they choose), unprotectAccount to reverse it, and listProtectedAccounts to see the full list. Protected accounts stay excluded from doesNotFollowBack, recent-unfollower results, the unfollow queue, and CSV exports across every future import — call protectAccount when the user says things like "don't ever suggest unfollowing @username," "mark this account as protected," or "tag @username as [label]." Orbly cannot detect verification status, business/brand status, or any other account attribute from the data it has — if the user asks to protect a whole category like "verified accounts" or "brands," never claim to auto-detect matching accounts; ask them to name the specific usernames, or offer to protect them one at a time as they come up in the conversation. If the user wants to see protected accounts included in a list anyway, they have to say so explicitly (e.g. "including protected ones") — don't include them by default.
 
 Orbly has no live connection to Instagram and cannot detect changes in real time — it only knows what changed between two snapshots the user has actually imported, so never imply live or ongoing monitoring. If asked for "always up to date without re-uploading," explain this plainly and point them at the "Update Instagram data" button at the top of the chat page for getting a fresh snapshot — that's the only mechanism for freshness, not automation.
 
@@ -44,7 +51,7 @@ export async function POST(req: Request) {
       },
       listDoesNotFollowBack: {
         description: CHAT_TOOL_DESCRIPTIONS.listDoesNotFollowBack,
-        inputSchema: paginatedListInputSchema,
+        inputSchema: doesNotFollowBackInputSchema,
       },
       listMutuals: {
         description: CHAT_TOOL_DESCRIPTIONS.listMutuals,
@@ -73,6 +80,18 @@ export async function POST(req: Request) {
       exportListAsCSV: {
         description: CHAT_TOOL_DESCRIPTIONS.exportListAsCSV,
         inputSchema: exportListAsCSVInputSchema,
+      },
+      protectAccount: {
+        description: CHAT_TOOL_DESCRIPTIONS.protectAccount,
+        inputSchema: protectAccountInputSchema,
+      },
+      unprotectAccount: {
+        description: CHAT_TOOL_DESCRIPTIONS.unprotectAccount,
+        inputSchema: unprotectAccountInputSchema,
+      },
+      listProtectedAccounts: {
+        description: CHAT_TOOL_DESCRIPTIONS.listProtectedAccounts,
+        inputSchema: emptyInputSchema,
       },
     },
   });

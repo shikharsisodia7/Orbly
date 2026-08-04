@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { useSnapshots } from "@/hooks/useSnapshots";
 import { useLostFollowerEvents } from "@/hooks/useLostFollowerEvents";
 import { useQueueUsernames } from "@/hooks/useQueueUsernames";
+import { useProtectedUsernames } from "@/hooks/useProtectedUsernames";
 import { addManyToQueue } from "@/lib/db/queries";
 import { formatDateRange } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
@@ -24,6 +25,7 @@ export default function UnfollowersPage() {
   const snapshots = useSnapshots();
   const events = useLostFollowerEvents();
   const queuedUsernames = useQueueUsernames();
+  const protectedUsernames = useProtectedUsernames();
   const [period, setPeriod] = useState<PeriodFilter>("all");
   const [followingFilter, setFollowingFilter] = useState<FollowingFilter>("all");
   const [addedUsernames, setAddedUsernames] = useState<Set<string>>(new Set());
@@ -31,7 +33,7 @@ export default function UnfollowersPage() {
 
   const filtered = useMemo(() => {
     if (!events) return [];
-    let list = events;
+    let list = events.filter((e) => !protectedUsernames.has(e.normalizedUsername));
 
     if (period === "latest" && snapshots && snapshots.length >= 2) {
       const latestPairTo = snapshots[0].id;
@@ -45,7 +47,7 @@ export default function UnfollowersPage() {
     if (followingFilter === "not") list = list.filter((e) => !e.stillFollowingThem);
 
     return list;
-  }, [events, period, followingFilter, snapshots, now]);
+  }, [events, period, followingFilter, snapshots, now, protectedUsernames]);
 
   async function handleAddOne(event: (typeof filtered)[number]) {
     await addManyToQueue([

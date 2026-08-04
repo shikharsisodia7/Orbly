@@ -1,5 +1,6 @@
 import { getDb } from "./index";
 import type {
+  ProtectedAccountRecord,
   QueueItemRecord,
   QueueSource,
   QueueStatus,
@@ -159,17 +160,14 @@ export async function deleteAllData(): Promise<void> {
   const db = getDb();
   await db.transaction(
     "rw",
-    db.snapshots,
-    db.snapshotFollowers,
-    db.snapshotFollowing,
-    db.queueItems,
-    db.settings,
+    [db.snapshots, db.snapshotFollowers, db.snapshotFollowing, db.queueItems, db.settings, db.protectedAccounts],
     async () => {
       await db.snapshots.clear();
       await db.snapshotFollowers.clear();
       await db.snapshotFollowing.clear();
       await db.queueItems.clear();
       await db.settings.clear();
+      await db.protectedAccounts.clear();
     }
   );
 }
@@ -294,6 +292,59 @@ export async function clearCompletedAndSkipped(): Promise<void> {
     .anyOf(["completed", "skipped"])
     .toArray();
   await db.queueItems.bulkDelete(items.map((i) => i.id));
+}
+
+// --- Protected accounts ---
+
+export async function getProtectedAccounts(): Promise<ProtectedAccountRecord[]> {
+  const all = await getDb().protectedAccounts.toArray();
+  return all.sort((a, b) => b.dateAdded.localeCompare(a.dateAdded));
+}
+
+export async function getProtectedUsernames(): Promise<Set<string>> {
+  const all = await getDb().protectedAccounts.toArray();
+  return new Set(all.map((item) => item.normalizedUsername));
+}
+
+export interface ProtectAccountInput {
+  normalizedUsername: string;
+  displayUsername: string;
+  profileUrl: string;
+  label?: string | null;
+}
+
+/**
+ * Marks an account protected, or updates its label if it's already
+ * protected — never creates a duplicate record for the same username, since
+ * &normalizedUsername is a unique index.
+ */
+export async function protectAccount(input: ProtectAccountInput): Promise<ProtectedAccountRecord> {
+  const db = getDb();
+  const existing = await db.protectedAccounts.where("normalizedUsername").equals(input.normalizedUsername).first();
+  if (existing) {
+    const updated: ProtectedAccountRecord = { ...existing, label: input.label ?? existing.label };
+    await db.protectedAccounts.put(updated);
+    return updated;
+  }
+  const record: ProtectedAccountRecord = {
+    id: newId(),
+    normalizedUsername: input.normalizedUsername,
+    displayUsername: input.displayUsername,
+    profileUrl: input.profileUrl,
+    label: input.label ?? null,
+    dateAdded: new Date().toISOString(),
+  };
+  await db.protectedAccounts.add(record);
+  return record;
+}
+
+/** Returns true if the account was protected and is now removed, false if it wasn't protected. */
+export async function unprotectAccount(normalizedUsername: string): Promise<boolean> {
+  const db = getDb();
+  const existing = await db.protectedAccounts.where("normalizedUsername").equals(normalizedUsername).first();
+  if (!existing) return false;
+  await db.protectedAccounts.delete(existing.id);
+  return true;
 }
 
 // --- Settings ---

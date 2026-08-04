@@ -1,6 +1,13 @@
 import { getDb } from "@/lib/db";
 import { recordToRelationship } from "@/lib/db/mappers";
-import { getAllSnapshots, getSnapshotById } from "@/lib/db/queries";
+import {
+  getAllSnapshots,
+  getProtectedAccounts,
+  getProtectedUsernames,
+  getSnapshotById,
+  protectAccount as dbProtectAccount,
+  unprotectAccount as dbUnprotectAccount,
+} from "@/lib/db/queries";
 import type { SnapshotRecord } from "@/lib/db/schema";
 import { computeCurrentRelationships, computeSnapshotChanges } from "./comparisons";
 import {
@@ -12,12 +19,16 @@ import {
   searchAndPaginate,
   type PaginatedResult,
 } from "./chat-data";
+import { buildProfileUrl } from "./normalize";
 import { computeLostFollowerEvents } from "@/hooks/useLostFollowerEvents";
 import type {
   PaginatedListInput,
   CheckAccountInput,
+  DoesNotFollowBackInput,
   ExportListAsCSVInput,
   ListRecentUnfollowersInput,
+  ProtectAccountInput,
+  UnprotectAccountInput,
 } from "./chat-tool-schemas";
 
 /**
@@ -49,17 +60,18 @@ async function getRelationshipsForSnapshot(snapshotId: string) {
 }
 
 /**
- * Usernames the user has already marked "unfollowed" via the queue (either
- * from this chat's interactive list, or the older dashboard's Queue page —
- * both write to the same table). The current snapshot was taken before that
- * happened, so its raw export still lists them; hiding them here is what
- * keeps a repeated "who doesn't follow me back" from re-surfacing someone
- * already handled. They reappear correctly, or drop out for good, on the
- * next re-import.
+ * Usernames the user has already resolved via the queue — either marked
+ * "unfollowed" (completed) or explicitly "skipped" (from this chat's
+ * interactive list, or the older dashboard's Queue page — both write to the
+ * same table). Keyed on username alone, never on which snapshot produced the
+ * suggestion, so this stays valid across every future import: hiding them
+ * here is what keeps a repeated "who doesn't follow me back" from
+ * re-surfacing someone already dealt with, no matter how many new snapshots
+ * get imported afterward.
  */
 async function getResolvedUsernames(): Promise<Set<string>> {
-  const completed = await getDb().queueItems.where("status").equals("completed").toArray();
-  return new Set(completed.map((item) => item.normalizedUsername));
+  const resolved = await getDb().queueItems.where("status").anyOf(["completed", "skipped"]).toArray();
+  return new Set(resolved.map((item) => item.normalizedUsername));
 }
 
 const NO_DATA_RESULT = {
@@ -87,34 +99,36 @@ export async function getAccountStats() {
 }
 
 async function listFromBreakdown(
-  input: PaginatedListInput,
+  input: PaginatedListInput & { includeProtected?: boolean },
   pick: (breakdown: ReturnType<typeof computeCurrentRelationships>) => ReturnType<typeof computeCurrentRelationships>["mutuals"],
-  excludeResolved: boolean
+  options: { excludeResolved: boolean; excludeProtected: boolean }
 ): Promise<{ available: true; result: PaginatedResult } | typeof NO_DATA_RESULT> {
   const snapshot = await getLatestUsableSnapshot();
   if (!snapshot) return NO_DATA_RESULT;
   const { followers, following } = await getRelationshipsForSnapshot(snapshot.id);
   const breakdown = computeCurrentRelationships(followers, following);
-  const picked = pick(breakdown);
-  const filtered = excludeResolved
-    ? await (async () => {
-        const resolved = await getResolvedUsernames();
-        return resolved.size === 0 ? picked : picked.filter((r) => !resolved.has(r.normalizedUsername));
-      })()
-    : picked;
+  let filtered = pick(breakdown);
+  if (options.excludeResolved) {
+    const resolved = await getResolvedUsernames();
+    if (resolved.size > 0) filtered = filtered.filter((r) => !resolved.has(r.normalizedUsername));
+  }
+  if (options.excludeProtected && !input.includeProtected) {
+    const protectedUsernames = await getProtectedUsernames();
+    if (protectedUsernames.size > 0) filtered = filtered.filter((r) => !protectedUsernames.has(r.normalizedUsername));
+  }
   return { available: true, result: searchAndPaginate(filtered, input) };
 }
 
-export async function listDoesNotFollowBack(input: PaginatedListInput) {
-  return listFromBreakdown(input, (b) => b.doesNotFollowBack, true);
+export async function listDoesNotFollowBack(input: DoesNotFollowBackInput) {
+  return listFromBreakdown(input, (b) => b.doesNotFollowBack, { excludeResolved: true, excludeProtected: true });
 }
 
 export async function listMutuals(input: PaginatedListInput) {
-  return listFromBreakdown(input, (b) => b.mutuals, false);
+  return listFromBreakdown(input, (b) => b.mutuals, { excludeResolved: false, excludeProtected: false });
 }
 
 export async function listYouDontFollowBack(input: PaginatedListInput) {
-  return listFromBreakdown(input, (b) => b.youDontFollowBack, false);
+  return listFromBreakdown(input, (b) => b.youDontFollowBack, { excludeResolved: false, excludeProtected: false });
 }
 
 export async function checkAccount(input: CheckAccountInput) {
@@ -125,10 +139,15 @@ export async function checkAccount(input: CheckAccountInput) {
 }
 
 export async function listRecentUnfollowers(input: ListRecentUnfollowersInput) {
-  const events = await computeLostFollowerEvents();
-  if (events === undefined) {
+  const allEvents = await computeLostFollowerEvents();
+  if (allEvents === undefined) {
     return NO_DATA_RESULT;
   }
+  const protectedUsernames = input.includeProtected ? new Set<string>() : await getProtectedUsernames();
+  const events =
+    protectedUsernames.size === 0 ? allEvents : allEvents.filter((e) => !protectedUsernames.has(e.normalizedUsername));
+  const hiddenForProtection = allEvents.length - events.length;
+
   if (events.length === 0) {
     const snapshotCount = (await getAllSnapshots()).length;
     return {
@@ -138,7 +157,9 @@ export async function listRecentUnfollowers(input: ListRecentUnfollowersInput) {
       note:
         snapshotCount < 2
           ? "Only one snapshot has been imported, so there's no history to compare — this requires at least two imports over time."
-          : "No lost followers detected between any of the imported snapshots.",
+          : hiddenForProtection > 0
+            ? "No lost followers to show — the only ones detected are accounts marked protected. Ask to include protected accounts to see them."
+            : "No lost followers detected between any of the imported snapshots.",
     };
   }
   const limit = Math.min(input.limit ?? 50, 200);
@@ -261,17 +282,19 @@ export async function exportListAsCSV(input: ExportListAsCSVInput) {
         ? breakdown.doesNotFollowBack
         : breakdown.youDontFollowBack;
 
-  // notFollowingBack mirrors listDoesNotFollowBack's resolved-queue
-  // exclusion, so an export matches what the chat would say if asked right
-  // now — mutuals/nonMutualFollowers have no such concept (see
-  // getResolvedUsernames above).
-  const filtered =
-    listType === "notFollowingBack"
-      ? await (async () => {
-          const resolved = await getResolvedUsernames();
-          return resolved.size === 0 ? picked : picked.filter((r) => !resolved.has(r.normalizedUsername));
-        })()
-      : picked;
+  // notFollowingBack mirrors listDoesNotFollowBack's resolved-queue and
+  // protected-account exclusions, so an export matches what the chat would
+  // say if asked right now — mutuals/nonMutualFollowers have no such concept
+  // (see getResolvedUsernames above).
+  let filtered = picked;
+  if (listType === "notFollowingBack") {
+    const resolved = await getResolvedUsernames();
+    if (resolved.size > 0) filtered = filtered.filter((r) => !resolved.has(r.normalizedUsername));
+    if (!input.includeProtected) {
+      const protectedUsernames = await getProtectedUsernames();
+      if (protectedUsernames.size > 0) filtered = filtered.filter((r) => !protectedUsernames.has(r.normalizedUsername));
+    }
+  }
 
   return {
     available: true as const,
@@ -281,5 +304,45 @@ export async function exportListAsCSV(input: ExportListAsCSVInput) {
     filename: buildCSVFilename(listType, snapshot.importedAt),
     csv: buildRelationshipCSV(filtered),
     snapshotImportedAt: snapshot.importedAt,
+  };
+}
+
+function normalizeUsernameInput(raw: string): string {
+  return raw.trim().replace(/^@+/, "").toLowerCase();
+}
+
+export async function protectAccount(input: ProtectAccountInput) {
+  const normalized = normalizeUsernameInput(input.username);
+  const record = await dbProtectAccount({
+    normalizedUsername: normalized,
+    displayUsername: normalized,
+    profileUrl: buildProfileUrl(normalized),
+    label: input.label ?? null,
+  });
+  return {
+    available: true as const,
+    normalizedUsername: record.normalizedUsername,
+    label: record.label,
+    dateAdded: record.dateAdded,
+  };
+}
+
+export async function unprotectAccount(input: UnprotectAccountInput) {
+  const normalized = normalizeUsernameInput(input.username);
+  const wasProtected = await dbUnprotectAccount(normalized);
+  return { available: true as const, normalizedUsername: normalized, wasProtected };
+}
+
+export async function listProtectedAccounts() {
+  const accounts = await getProtectedAccounts();
+  return {
+    available: true as const,
+    total: accounts.length,
+    accounts: accounts.map((a) => ({
+      username: a.displayUsername,
+      normalizedUsername: a.normalizedUsername,
+      label: a.label,
+      dateAdded: a.dateAdded,
+    })),
   };
 }

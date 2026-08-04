@@ -6,12 +6,16 @@ import {
   deleteSnapshot,
   findSnapshotByDatasetHash,
   getAllSnapshots,
+  getProtectedAccounts,
+  getProtectedUsernames,
   getQueueItems,
   getSettings,
   getSnapshotFollowers,
   getSnapshotFollowing,
   markAccountUnfollowed,
+  protectAccount,
   reconcileQueueWithFollowing,
+  unprotectAccount,
   updateQueueItemStatus,
   updateSettings,
 } from "./queries";
@@ -264,6 +268,72 @@ describe("reconcileQueueWithFollowing", () => {
     const skipped = await getQueueItems("skipped");
     expect(skipped).toHaveLength(1);
     expect(skipped[0].id).toBe(first.id);
+  });
+});
+
+describe("protected accounts", () => {
+  it("protects an account with a label and lists it", async () => {
+    await protectAccount({
+      normalizedUsername: "alice",
+      displayUsername: "alice",
+      profileUrl: "https://www.instagram.com/alice/",
+      label: "close friend",
+    });
+    const accounts = await getProtectedAccounts();
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0]).toMatchObject({ normalizedUsername: "alice", label: "close friend" });
+
+    const usernames = await getProtectedUsernames();
+    expect(usernames.has("alice")).toBe(true);
+  });
+
+  it("protects without a label when none is given", async () => {
+    await protectAccount({
+      normalizedUsername: "bob",
+      displayUsername: "bob",
+      profileUrl: "https://www.instagram.com/bob/",
+    });
+    const [account] = await getProtectedAccounts();
+    expect(account.label).toBeNull();
+  });
+
+  it("updates the label instead of duplicating when protecting the same username again", async () => {
+    await protectAccount({
+      normalizedUsername: "alice",
+      displayUsername: "alice",
+      profileUrl: "https://www.instagram.com/alice/",
+      label: "verified",
+    });
+    await protectAccount({
+      normalizedUsername: "alice",
+      displayUsername: "alice",
+      profileUrl: "https://www.instagram.com/alice/",
+      label: "close friend",
+    });
+    const accounts = await getProtectedAccounts();
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0].label).toBe("close friend");
+  });
+
+  it("unprotects an account, and reports whether it was actually protected", async () => {
+    await protectAccount({
+      normalizedUsername: "alice",
+      displayUsername: "alice",
+      profileUrl: "https://www.instagram.com/alice/",
+    });
+    expect(await unprotectAccount("alice")).toBe(true);
+    expect(await getProtectedAccounts()).toHaveLength(0);
+    expect(await unprotectAccount("alice")).toBe(false);
+  });
+
+  it("is cleared by deleteAllData", async () => {
+    await protectAccount({
+      normalizedUsername: "alice",
+      displayUsername: "alice",
+      profileUrl: "https://www.instagram.com/alice/",
+    });
+    await deleteAllData();
+    expect(await getProtectedAccounts()).toHaveLength(0);
   });
 });
 

@@ -8,17 +8,19 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Heart } from "lucide-react";
 import { useCurrentRelationships } from "@/hooks/useRelationships";
 import { useResolvedUsernames } from "@/hooks/useResolvedUsernames";
+import { useProtectedUsernames } from "@/hooks/useProtectedUsernames";
 
 function NonfollowersContent({ snapshotId }: { snapshotId: string }) {
   const relationships = useCurrentRelationships(snapshotId);
   const resolved = useResolvedUsernames();
+  const protectedUsernames = useProtectedUsernames();
 
   const active = useMemo(() => {
     if (!relationships) return [];
     return relationships.doesNotFollowBack.filter(
-      (r) => !resolved.has(r.normalizedUsername)
+      (r) => !resolved.has(r.normalizedUsername) && !protectedUsernames.has(r.normalizedUsername)
     );
-  }, [relationships, resolved]);
+  }, [relationships, resolved, protectedUsernames]);
 
   if (!relationships) return null;
 
@@ -35,8 +37,9 @@ function NonfollowersContent({ snapshotId }: { snapshotId: string }) {
       {hiddenCount > 0 && (
         <p className="mb-4 rounded-lg bg-surface px-3 py-2 text-xs text-ink-soft">
           {hiddenCount} {hiddenCount === 1 ? "account is" : "accounts are"} hidden because you
-          marked {hiddenCount === 1 ? "it" : "them"} done in your queue. They&apos;ll disappear for
-          good after your next import.
+          already marked {hiddenCount === 1 ? "it" : "them"} done or skipped in your queue, or
+          protected {hiddenCount === 1 ? "it" : "them"}. They stay hidden across every future import
+          too, until you undo that in the queue or your protected accounts.
         </p>
       )}
 
