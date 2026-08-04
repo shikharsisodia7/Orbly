@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ExternalLink, Loader2, UserX } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
@@ -35,16 +35,28 @@ interface DoesNotFollowBackListProps {
  * time an item here gets marked done — a numeric offset would silently
  * drift and skip an account each time; a cursor anchored to actual content
  * stays correct regardless of how many items ahead of it disappear.
+ *
+ * A plain `onClick` only fires for a primary left-click — opening the link
+ * via the browser's own right-click "Open link in new tab" (or middle-click)
+ * bypasses it entirely, so the account would open without ever being marked
+ * handled. `onAuxClick` covers middle-click; there's no DOM event that fires
+ * only when a specific context-menu item is chosen, so `onContextMenu` marks
+ * it the moment the menu opens — the native menu still appears untouched
+ * either way. handledRef guards against the same account firing twice
+ * (e.g. a context-menu right-click followed by a real left-click).
  */
 export function DoesNotFollowBackList({ initialItems, initialTotal }: DoesNotFollowBackListProps) {
   const [items, setItems] = useState(initialItems);
   const [handledCount, setHandledCount] = useState(0);
   const [loadingUsername, setLoadingUsername] = useState<string | null>(null);
   const [exhausted, setExhausted] = useState(false);
+  const handledRef = useRef<Set<string>>(new Set());
 
   const remaining = Math.max(0, initialTotal - handledCount);
 
   async function handleUnfollowed(item: ListItem) {
+    if (handledRef.current.has(item.normalizedUsername)) return;
+    handledRef.current.add(item.normalizedUsername);
     setLoadingUsername(item.normalizedUsername);
     setItems((prev) => prev.filter((i) => i.normalizedUsername !== item.normalizedUsername));
     setHandledCount((c) => c + 1);
@@ -101,6 +113,10 @@ export function DoesNotFollowBackList({ initialItems, initialTotal }: DoesNotFol
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => handleUnfollowed(item)}
+                onAuxClick={(e) => {
+                  if (e.button === 1) handleUnfollowed(item);
+                }}
+                onContextMenu={() => handleUnfollowed(item)}
                 aria-label={`Open @${item.username}'s profile and mark them as unfollowed`}
                 title="Opens their profile — marks them as unfollowed and removes them from this list"
                 layout
