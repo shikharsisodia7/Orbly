@@ -41,6 +41,40 @@ export type ListRecentUnfollowersInput = z.infer<typeof listRecentUnfollowersInp
 
 export const emptyInputSchema = z.object({});
 
+export const csvListTypeSchema = z.enum([
+  "nonMutualFollowers",
+  "notFollowingBack",
+  "mutuals",
+  "lostFollowers",
+  "newFollowers",
+]);
+export type CSVListType = z.infer<typeof csvListTypeSchema>;
+
+export const exportListAsCSVInputSchema = z.object({
+  listType: csvListTypeSchema.describe(
+    "Which relationship list to export: nonMutualFollowers (people who follow the user but the user doesn't follow back), notFollowingBack (people the user follows who don't follow back), mutuals (follow each other), lostFollowers (followers lost between two snapshots), or newFollowers (followers gained between two snapshots)."
+  ),
+  snapshotId: z
+    .string()
+    .optional()
+    .describe(
+      "Which snapshot to read from for nonMutualFollowers, notFollowingBack, or mutuals. Defaults to the latest usable snapshot. Ignored for lostFollowers/newFollowers."
+    ),
+  fromSnapshotId: z
+    .string()
+    .optional()
+    .describe(
+      "For lostFollowers/newFollowers only: the earlier snapshot in the comparison pair. Must be paired with toSnapshotId. Defaults (when omitted) to the two most recent usable snapshots."
+    ),
+  toSnapshotId: z
+    .string()
+    .optional()
+    .describe(
+      "For lostFollowers/newFollowers only: the later snapshot in the comparison pair. Must be paired with fromSnapshotId. Defaults (when omitted) to the two most recent usable snapshots."
+    ),
+});
+export type ExportListAsCSVInput = z.infer<typeof exportListAsCSVInputSchema>;
+
 export const CHAT_TOOL_DESCRIPTIONS = {
   getAccountStats:
     "Get the current follower count, following count, mutuals count, doesn't-follow-back count, and you-don't-follow-back count from the user's latest imported Instagram snapshot.",
@@ -58,4 +92,6 @@ export const CHAT_TOOL_DESCRIPTIONS = {
     "List every Instagram export snapshot the user has imported into Orbly, with date, follower/following counts, and data-completeness status.",
   getQueueStatus:
     "Get the count of accounts currently in the user's manual Unfollow Queue, broken down by pending/completed/skipped. Orbly never unfollows automatically — the queue is just a personal checklist.",
+  exportListAsCSV:
+    "Generate a downloadable CSV file (username, profile_url, detected_at) for one of the user's relationship lists — nonMutualFollowers, notFollowingBack, mutuals, lostFollowers, or newFollowers — and render a Download CSV button. Use this instead of listing accounts in text whenever the user asks for a spreadsheet, list, export, or download, or when a list is too long to usefully read in chat. The file is generated and downloaded entirely in the user's browser — nothing is uploaded anywhere.",
 } as const;

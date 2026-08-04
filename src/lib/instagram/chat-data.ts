@@ -1,5 +1,6 @@
 import type { Relationship } from "./types";
 import { computeCurrentRelationships } from "./comparisons";
+import type { CSVListType } from "./chat-tool-schemas";
 
 /**
  * Pure, framework-agnostic helpers the AI chat feature uses to turn a
@@ -102,4 +103,43 @@ export function lookupAccount(
     followsYouSinceTimestamp: followerRecord?.timestamp ?? null,
     youFollowSinceTimestamp: followingRecord?.timestamp ?? null,
   };
+}
+
+export const CSV_LIST_LABELS: Record<CSVListType, string> = {
+  nonMutualFollowers: "Followers you don't follow back",
+  notFollowingBack: "Accounts you follow that don't follow back",
+  mutuals: "Mutual follows",
+  lostFollowers: "Followers lost between the two snapshots",
+  newFollowers: "New followers gained between the two snapshots",
+};
+
+const CSV_LIST_SLUGS: Record<CSVListType, string> = {
+  nonMutualFollowers: "non-mutual-followers",
+  notFollowingBack: "not-following-back",
+  mutuals: "mutuals",
+  lostFollowers: "lost-followers",
+  newFollowers: "new-followers",
+};
+
+function csvEscape(value: string): string {
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+/**
+ * Builds a CSV string (username, profile_url, detected_at) for a relationship
+ * list. `detectedAt` is a single value applied to every row — blank for a
+ * plain current-state list (nonMutualFollowers/notFollowingBack/mutuals), or
+ * the "from → to" snapshot-pair range for a change-event list
+ * (lostFollowers/newFollowers), since those are only ever known to have
+ * happened sometime between two specific imports, not on an exact date.
+ */
+export function buildRelationshipCSV(relationships: Relationship[], detectedAt: string = ""): string {
+  const header = "username,profile_url,detected_at";
+  const rows = relationships.map((r) => [r.displayUsername, r.profileUrl, detectedAt].map(csvEscape).join(","));
+  return [header, ...rows].join("\n");
+}
+
+/** Filename for a CSV export, e.g. "orbly-lost-followers-2026-06-01.csv". */
+export function buildCSVFilename(listType: CSVListType, dateIso: string): string {
+  return `orbly-${CSV_LIST_SLUGS[listType]}-${dateIso.slice(0, 10)}.csv`;
 }

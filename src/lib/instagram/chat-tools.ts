@@ -1,11 +1,24 @@
 import { getDb } from "@/lib/db";
 import { recordToRelationship } from "@/lib/db/mappers";
-import { getAllSnapshots } from "@/lib/db/queries";
+import { getAllSnapshots, getSnapshotById } from "@/lib/db/queries";
 import type { SnapshotRecord } from "@/lib/db/schema";
-import { computeCurrentRelationships } from "./comparisons";
-import { buildAccountStats, lookupAccount, searchAndPaginate, type PaginatedResult } from "./chat-data";
+import { computeCurrentRelationships, computeSnapshotChanges } from "./comparisons";
+import {
+  buildAccountStats,
+  buildCSVFilename,
+  buildRelationshipCSV,
+  CSV_LIST_LABELS,
+  lookupAccount,
+  searchAndPaginate,
+  type PaginatedResult,
+} from "./chat-data";
 import { computeLostFollowerEvents } from "@/hooks/useLostFollowerEvents";
-import type { PaginatedListInput, CheckAccountInput, ListRecentUnfollowersInput } from "./chat-tool-schemas";
+import type {
+  PaginatedListInput,
+  CheckAccountInput,
+  ExportListAsCSVInput,
+  ListRecentUnfollowersInput,
+} from "./chat-tool-schemas";
 
 /**
  * Browser-only executors for the AI chat feature's client-side tools. Each
@@ -166,5 +179,107 @@ export async function getQueueStatus() {
     pending: items.filter((i) => i.status === "pending").length,
     completed: items.filter((i) => i.status === "completed").length,
     skipped: items.filter((i) => i.status === "skipped").length,
+  };
+}
+
+async function resolveSnapshot(snapshotId?: string): Promise<SnapshotRecord | null> {
+  if (snapshotId) {
+    const s = await getSnapshotById(snapshotId);
+    return s && isUsable(s) ? s : null;
+  }
+  return getLatestUsableSnapshot();
+}
+
+/**
+ * Resolves the two snapshots to diff for a change-event CSV export. A
+ * caller-supplied pair is honored only if both IDs are given and usable;
+ * otherwise (including a partial pair) this falls back to the two most
+ * recent usable snapshots, same as the rest of the app's change-detection.
+ */
+async function resolveSnapshotPair(
+  fromId?: string,
+  toId?: string
+): Promise<{ from: SnapshotRecord; to: SnapshotRecord } | null> {
+  if (fromId && toId) {
+    const [from, to] = await Promise.all([getSnapshotById(fromId), getSnapshotById(toId)]);
+    if (from && to && isUsable(from) && isUsable(to)) return { from, to };
+    return null;
+  }
+  const usable = (await getAllSnapshots()).filter(isUsable); // newest first
+  if (usable.length < 2) return null;
+  return { from: usable[1], to: usable[0] };
+}
+
+const NO_SNAPSHOT_PAIR_RESULT = {
+  available: false as const,
+  message:
+    "At least two usable Instagram snapshots are needed to compute lost/new followers, and either fewer than two are on file or the requested snapshot pair isn't usable. Tell the user to import another export over time to unlock this.",
+};
+
+export async function exportListAsCSV(input: ExportListAsCSVInput) {
+  const { listType } = input;
+  const label = CSV_LIST_LABELS[listType];
+
+  if (listType === "lostFollowers" || listType === "newFollowers") {
+    const pair = await resolveSnapshotPair(input.fromSnapshotId, input.toSnapshotId);
+    if (!pair) return NO_SNAPSHOT_PAIR_RESULT;
+
+    const [fromData, toData] = await Promise.all([
+      getRelationshipsForSnapshot(pair.from.id),
+      getRelationshipsForSnapshot(pair.to.id),
+    ]);
+    const changes = computeSnapshotChanges(
+      fromData.followers,
+      toData.followers,
+      fromData.following,
+      toData.following
+    );
+    const picked = listType === "lostFollowers" ? changes.lostFollowers : changes.newFollowers;
+    const detectedAt = `${pair.from.importedAt} to ${pair.to.importedAt}`;
+
+    return {
+      available: true as const,
+      listType,
+      label,
+      rowCount: picked.length,
+      filename: buildCSVFilename(listType, pair.to.importedAt),
+      csv: buildRelationshipCSV(picked, detectedAt),
+      rangeFromImportedAt: pair.from.importedAt,
+      rangeToImportedAt: pair.to.importedAt,
+    };
+  }
+
+  const snapshot = await resolveSnapshot(input.snapshotId);
+  if (!snapshot) return NO_DATA_RESULT;
+
+  const { followers, following } = await getRelationshipsForSnapshot(snapshot.id);
+  const breakdown = computeCurrentRelationships(followers, following);
+  const picked =
+    listType === "mutuals"
+      ? breakdown.mutuals
+      : listType === "notFollowingBack"
+        ? breakdown.doesNotFollowBack
+        : breakdown.youDontFollowBack;
+
+  // notFollowingBack mirrors listDoesNotFollowBack's resolved-queue
+  // exclusion, so an export matches what the chat would say if asked right
+  // now — mutuals/nonMutualFollowers have no such concept (see
+  // getResolvedUsernames above).
+  const filtered =
+    listType === "notFollowingBack"
+      ? await (async () => {
+          const resolved = await getResolvedUsernames();
+          return resolved.size === 0 ? picked : picked.filter((r) => !resolved.has(r.normalizedUsername));
+        })()
+      : picked;
+
+  return {
+    available: true as const,
+    listType,
+    label,
+    rowCount: filtered.length,
+    filename: buildCSVFilename(listType, snapshot.importedAt),
+    csv: buildRelationshipCSV(filtered),
+    snapshotImportedAt: snapshot.importedAt,
   };
 }

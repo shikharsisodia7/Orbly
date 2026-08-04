@@ -25,6 +25,7 @@ import {
 } from "@/lib/db/queries";
 import {
   checkAccount,
+  exportListAsCSV,
   getAccountStats,
   getQueueStatus,
   listDoesNotFollowBack,
@@ -35,6 +36,7 @@ import {
 } from "@/lib/instagram/chat-tools";
 import {
   checkAccountInputSchema,
+  exportListAsCSVInputSchema,
   listRecentUnfollowersInputSchema,
   paginatedListInputSchema,
 } from "@/lib/instagram/chat-tool-schemas";
@@ -182,6 +184,11 @@ export default function ChatPage() {
           case "getQueueStatus": {
             const output = await getQueueStatus();
             addToolOutput({ tool: "getQueueStatus", toolCallId: toolCall.toolCallId, output });
+            return;
+          }
+          case "exportListAsCSV": {
+            const output = await exportListAsCSV(exportListAsCSVInputSchema.parse(toolCall.input));
+            addToolOutput({ tool: "exportListAsCSV", toolCallId: toolCall.toolCallId, output });
             return;
           }
         }

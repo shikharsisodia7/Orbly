@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildAccountStats, lookupAccount, searchAndPaginate } from "./chat-data";
+import { buildAccountStats, buildCSVFilename, buildRelationshipCSV, lookupAccount, searchAndPaginate } from "./chat-data";
 import type { Relationship } from "./types";
 
 function rel(username: string): Relationship {
@@ -156,5 +156,52 @@ describe("searchAndPaginate", () => {
       expect(result.items).toHaveLength(0);
       expect(result.hasMore).toBe(false);
     });
+  });
+});
+
+describe("buildRelationshipCSV", () => {
+  it("builds a header plus one row per relationship, with a blank detected_at by default", () => {
+    const csv = buildRelationshipCSV([rel("alice"), rel("bob")]);
+    expect(csv).toBe(
+      [
+        "username,profile_url,detected_at",
+        "alice,https://www.instagram.com/alice/,",
+        "bob,https://www.instagram.com/bob/,",
+      ].join("\n")
+    );
+  });
+
+  it("applies the same detected_at value to every row when given a snapshot-pair range", () => {
+    const csv = buildRelationshipCSV([rel("alice")], "2026-05-01T00:00:00.000Z to 2026-06-01T00:00:00.000Z");
+    expect(csv).toBe(
+      "username,profile_url,detected_at\nalice,https://www.instagram.com/alice/,2026-05-01T00:00:00.000Z to 2026-06-01T00:00:00.000Z"
+    );
+  });
+
+  it("returns just the header for an empty list", () => {
+    expect(buildRelationshipCSV([])).toBe("username,profile_url,detected_at");
+  });
+
+  it("quotes and escapes fields containing commas, quotes, or newlines", () => {
+    const weird: Relationship = {
+      normalizedUsername: "weird",
+      displayUsername: 'weird, "name"',
+      profileUrl: "https://www.instagram.com/weird/",
+      timestamp: null,
+    };
+    const csv = buildRelationshipCSV([weird]);
+    const [, row] = csv.split("\n");
+    expect(row).toBe('"weird, ""name""",https://www.instagram.com/weird/,');
+  });
+});
+
+describe("buildCSVFilename", () => {
+  it("slugifies the list type and truncates the date to just the day", () => {
+    expect(buildCSVFilename("nonMutualFollowers", "2026-06-15T08:30:00.000Z")).toBe(
+      "orbly-non-mutual-followers-2026-06-15.csv"
+    );
+    expect(buildCSVFilename("lostFollowers", "2026-01-02T00:00:00.000Z")).toBe(
+      "orbly-lost-followers-2026-01-02.csv"
+    );
   });
 });

@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { Check, ExternalLink, History, ListChecks, UploadCloud, UserCheck, UserMinus, UserPlus, UserX, Users, X } from "lucide-react";
+import { Check, Download, ExternalLink, FileSpreadsheet, History, ListChecks, UploadCloud, UserCheck, UserMinus, UserPlus, UserX, Users, X } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { AnimatedCounter } from "@/components/motion/AnimatedCounter";
 import { ValidityBadge } from "@/components/ui/ValidityBadge";
@@ -322,6 +323,74 @@ function QueueStatusCard({ output }: { output: QueueStatusOutput }) {
   );
 }
 
+interface ExportListAsCSVOutput {
+  available: true;
+  listType: string;
+  label: string;
+  rowCount: number;
+  filename: string;
+  csv: string;
+}
+
+/**
+ * Triggers a client-side file download from an in-memory CSV string — no
+ * server route involved, consistent with the rest of the app never sending
+ * Instagram data off the device.
+ */
+function downloadCSV(filename: string, csv: string) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
+function ExportCSVCard({ output }: { output: ExportListAsCSVOutput }) {
+  const [downloaded, setDownloaded] = useState(false);
+
+  if (output.rowCount === 0) {
+    return (
+      <div className="rounded-2xl border border-border bg-white px-4 py-6 text-center text-sm text-ink-soft">
+        {output.label} — no accounts match right now, so there&apos;s nothing to export.
+      </div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className="w-full max-w-sm space-y-3 rounded-2xl border border-border bg-white p-4"
+    >
+      <div className="flex items-center gap-2.5">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-soft text-violet">
+          <FileSpreadsheet size={16} />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-ink">{output.label}</p>
+          <p className="text-[11px] text-ink-faint">
+            {formatCount(output.rowCount)} row{output.rowCount === 1 ? "" : "s"} · {output.filename}
+          </p>
+        </div>
+      </div>
+      <button
+        onClick={() => {
+          downloadCSV(output.filename, output.csv);
+          setDownloaded(true);
+        }}
+        className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-gradient-instagram px-3 py-2 text-xs font-medium text-white transition-opacity hover:opacity-90"
+      >
+        <Download size={13} /> {downloaded ? "Downloaded — click to save again" : "Download CSV"}
+      </button>
+    </motion.div>
+  );
+}
+
 export function ToolResultCard({ toolName, output }: { toolName: string; output: unknown }) {
   if (isUnavailable(output)) return <UnavailableCard />;
   if (!output || typeof output !== "object") return null;
@@ -344,6 +413,8 @@ export function ToolResultCard({ toolName, output }: { toolName: string; output:
       return <SnapshotsCard output={output as ListSnapshotsOutput} />;
     case "getQueueStatus":
       return <QueueStatusCard output={output as QueueStatusOutput} />;
+    case "exportListAsCSV":
+      return <ExportCSVCard output={output as ExportListAsCSVOutput} />;
     default:
       return null;
   }

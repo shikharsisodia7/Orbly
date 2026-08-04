@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { createSnapshot, deleteAllData, markAccountUnfollowed } from "@/lib/db/queries";
-import { getAccountStats, listDoesNotFollowBack, listMutuals } from "./chat-tools";
+import { exportListAsCSV, getAccountStats, listDoesNotFollowBack, listMutuals } from "./chat-tools";
 import type { Relationship } from "./types";
 
 function rel(username: string): Relationship {
@@ -89,5 +89,88 @@ describe("getAccountStats — resolved-queue exclusion", () => {
     // snapshot and must never change just because the queue changed.
     expect(after.followerCount).toBe(1);
     expect(after.followingCount).toBe(3);
+  });
+});
+
+describe("exportListAsCSV", () => {
+  it("reports unavailable when no snapshot has been imported", async () => {
+    const result = await exportListAsCSV({ listType: "mutuals" });
+    expect(result.available).toBe(false);
+  });
+
+  it("exports mutuals as a CSV with a blank detected_at column", async () => {
+    await createSnapshot({
+      followers: [rel("alice"), rel("dave")],
+      following: [rel("alice"), rel("dave"), rel("bob")],
+      datasetHash: "hash-csv-1",
+      originalFileName: null,
+    });
+
+    const result = await exportListAsCSV({ listType: "mutuals" });
+    if (!result.available) throw new Error("expected data to be available");
+    expect(result.rowCount).toBe(2);
+    expect(result.csv.split("\n")[0]).toBe("username,profile_url,detected_at");
+    expect(result.csv).toContain("alice,https://www.instagram.com/alice/,");
+    expect(result.filename).toMatch(/^orbly-mutuals-\d{4}-\d{2}-\d{2}\.csv$/);
+  });
+
+  it("excludes resolved (marked-unfollowed) accounts from a notFollowingBack export, same as the chat list", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob"), rel("charlie")],
+      datasetHash: "hash-csv-2",
+      originalFileName: null,
+    });
+    await markAccountUnfollowed({
+      normalizedUsername: "bob",
+      displayUsername: "bob",
+      profileUrl: "https://www.instagram.com/bob/",
+    });
+
+    const result = await exportListAsCSV({ listType: "notFollowingBack" });
+    if (!result.available) throw new Error("expected data to be available");
+    expect(result.rowCount).toBe(1);
+    expect(result.csv).toContain("charlie");
+    expect(result.csv).not.toContain("bob");
+  });
+
+  it("uses the snapshot-pair range (not a single date) as detected_at for lostFollowers/newFollowers", async () => {
+    await createSnapshot({
+      followers: [rel("alice"), rel("bob")],
+      following: [rel("alice")],
+      datasetHash: "hash-csv-3a",
+      originalFileName: null,
+    });
+    await new Promise((r) => setTimeout(r, 5));
+    await createSnapshot({
+      followers: [rel("alice"), rel("charlie")],
+      following: [rel("alice")],
+      datasetHash: "hash-csv-3b",
+      originalFileName: null,
+    });
+
+    const lost = await exportListAsCSV({ listType: "lostFollowers" });
+    if (!lost.available) throw new Error("expected data to be available");
+    expect(lost.rowCount).toBe(1);
+    const lostRow = lost.csv.split("\n")[1];
+    expect(lostRow.startsWith("bob,https://www.instagram.com/bob/,")).toBe(true);
+    expect(lostRow).toMatch(/,.+ to .+$/);
+
+    const gained = await exportListAsCSV({ listType: "newFollowers" });
+    if (!gained.available) throw new Error("expected data to be available");
+    expect(gained.rowCount).toBe(1);
+    expect(gained.csv).toContain("charlie");
+  });
+
+  it("reports unavailable for lostFollowers/newFollowers with fewer than two usable snapshots", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice")],
+      datasetHash: "hash-csv-4",
+      originalFileName: null,
+    });
+
+    const result = await exportListAsCSV({ listType: "lostFollowers" });
+    expect(result.available).toBe(false);
   });
 });
