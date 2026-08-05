@@ -184,6 +184,34 @@ describe("getAccountStats — resolved-queue exclusion", () => {
     expect(after.followerCount).toBe(1);
     expect(after.followingCount).toBe(3);
   });
+
+  it("also subtracts protected accounts from the outstanding doesNotFollowBackCount", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob"), rel("charlie")],
+      datasetHash: "hash-3-protected",
+      originalFileName: null,
+    });
+
+    const before = await getAccountStats();
+    if (!before.available) throw new Error("expected data to be available");
+    expect(before.doesNotFollowBackCount).toBe(2);
+
+    await dbProtectAccount({
+      normalizedUsername: "bob",
+      displayUsername: "bob",
+      profileUrl: "https://www.instagram.com/bob/",
+    });
+
+    const after = await getAccountStats();
+    if (!after.available) throw new Error("expected data to be available");
+    // Must match what listDoesNotFollowBack actually shows, not just the
+    // raw follower/following counts.
+    expect(after.doesNotFollowBackCount).toBe(1);
+    const list = await listDoesNotFollowBack({});
+    if (!list.available) throw new Error("expected data to be available");
+    expect(list.result.total).toBe(after.doesNotFollowBackCount);
+  });
 });
 
 describe("exportListAsCSV", () => {

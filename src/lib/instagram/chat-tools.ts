@@ -84,8 +84,16 @@ export async function getAccountStats() {
   const snapshot = await getLatestUsableSnapshot();
   if (!snapshot) return NO_DATA_RESULT;
   const { followers, following } = await getRelationshipsForSnapshot(snapshot.id);
-  const resolved = await getResolvedUsernames();
+  const [resolved, protectedUsernames] = await Promise.all([getResolvedUsernames(), getProtectedUsernames()]);
   const stats = buildAccountStats(followers, following);
+  // Counted precisely (not by subtracting set sizes from the raw total) so
+  // this always matches listDoesNotFollowBack exactly, even though not
+  // every resolved/protected username is necessarily still in the raw
+  // doesNotFollowBack set.
+  const breakdown = computeCurrentRelationships(followers, following);
+  const outstandingDoesNotFollowBack = breakdown.doesNotFollowBack.filter(
+    (r) => !resolved.has(r.normalizedUsername) && !protectedUsernames.has(r.normalizedUsername)
+  ).length;
   return {
     available: true as const,
     snapshotImportedAt: snapshot.importedAt,
@@ -93,8 +101,9 @@ export async function getAccountStats() {
     ...stats,
     // The raw don't-follow-back count is a fact about the snapshot; the
     // outstanding count also accounts for ones the user already marked
-    // unfollowed since that snapshot was taken, matching the list itself.
-    doesNotFollowBackCount: Math.max(0, stats.doesNotFollowBackCount - resolved.size),
+    // unfollowed or protected, matching what listDoesNotFollowBack actually
+    // shows.
+    doesNotFollowBackCount: outstandingDoesNotFollowBack,
   };
 }
 
