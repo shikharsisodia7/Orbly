@@ -1,14 +1,17 @@
 import { getDb } from "@/lib/db";
 import { recordToRelationship } from "@/lib/db/mappers";
 import {
+  addExclusionRule as dbAddExclusionRule,
   getAllSnapshots,
+  getExclusionRules,
   getProtectedAccounts,
   getProtectedUsernames,
   getSnapshotById,
   protectAccount as dbProtectAccount,
+  removeExclusionRule as dbRemoveExclusionRule,
   unprotectAccount as dbUnprotectAccount,
 } from "@/lib/db/queries";
-import type { SnapshotRecord } from "@/lib/db/schema";
+import type { ExclusionRuleRecord, SnapshotRecord } from "@/lib/db/schema";
 import { computeCurrentRelationships, computeSnapshotChanges } from "./comparisons";
 import {
   buildAccountStats,
@@ -20,6 +23,7 @@ import {
   type PaginatedResult,
 } from "./chat-data";
 import { buildProfileUrl } from "./normalize";
+import { matchesAnyExclusionRule } from "./exclusion-rules";
 import { computeLostFollowerEvents } from "@/hooks/useLostFollowerEvents";
 import type {
   PaginatedListInput,
@@ -29,6 +33,8 @@ import type {
   ListRecentUnfollowersInput,
   ProtectAccountInput,
   UnprotectAccountInput,
+  AddExclusionRuleInput,
+  RemoveExclusionRuleInput,
 } from "./chat-tool-schemas";
 
 /**
@@ -84,15 +90,22 @@ export async function getAccountStats() {
   const snapshot = await getLatestUsableSnapshot();
   if (!snapshot) return NO_DATA_RESULT;
   const { followers, following } = await getRelationshipsForSnapshot(snapshot.id);
-  const [resolved, protectedUsernames] = await Promise.all([getResolvedUsernames(), getProtectedUsernames()]);
+  const [resolved, protectedUsernames, exclusionRules] = await Promise.all([
+    getResolvedUsernames(),
+    getProtectedUsernames(),
+    getExclusionRules(),
+  ]);
   const stats = buildAccountStats(followers, following);
   // Counted precisely (not by subtracting set sizes from the raw total) so
   // this always matches listDoesNotFollowBack exactly, even though not
-  // every resolved/protected username is necessarily still in the raw
-  // doesNotFollowBack set.
+  // every resolved/protected/excluded username is necessarily still in the
+  // raw doesNotFollowBack set.
   const breakdown = computeCurrentRelationships(followers, following);
   const outstandingDoesNotFollowBack = breakdown.doesNotFollowBack.filter(
-    (r) => !resolved.has(r.normalizedUsername) && !protectedUsernames.has(r.normalizedUsername)
+    (r) =>
+      !resolved.has(r.normalizedUsername) &&
+      !protectedUsernames.has(r.normalizedUsername) &&
+      !matchesAnyExclusionRule(r.normalizedUsername, exclusionRules)
   ).length;
   return {
     available: true as const,
@@ -110,7 +123,7 @@ export async function getAccountStats() {
 async function listFromBreakdown(
   input: PaginatedListInput & { includeProtected?: boolean },
   pick: (breakdown: ReturnType<typeof computeCurrentRelationships>) => ReturnType<typeof computeCurrentRelationships>["mutuals"],
-  options: { excludeResolved: boolean; excludeProtected: boolean }
+  options: { excludeResolved: boolean; excludeProtected: boolean; excludeExclusionRules: boolean }
 ): Promise<{ available: true; result: PaginatedResult } | typeof NO_DATA_RESULT> {
   const snapshot = await getLatestUsableSnapshot();
   if (!snapshot) return NO_DATA_RESULT;
@@ -125,19 +138,40 @@ async function listFromBreakdown(
     const protectedUsernames = await getProtectedUsernames();
     if (protectedUsernames.size > 0) filtered = filtered.filter((r) => !protectedUsernames.has(r.normalizedUsername));
   }
+  // Unlike includeProtected, exclusion rules have no "show me anyway"
+  // override — they're a hard, user-set "never suggest or include this"
+  // constraint, so this filter always applies when the caller opts in.
+  if (options.excludeExclusionRules) {
+    const exclusionRules = await getExclusionRules();
+    if (exclusionRules.length > 0) {
+      filtered = filtered.filter((r) => !matchesAnyExclusionRule(r.normalizedUsername, exclusionRules));
+    }
+  }
   return { available: true, result: searchAndPaginate(filtered, input) };
 }
 
 export async function listDoesNotFollowBack(input: DoesNotFollowBackInput) {
-  return listFromBreakdown(input, (b) => b.doesNotFollowBack, { excludeResolved: true, excludeProtected: true });
+  return listFromBreakdown(input, (b) => b.doesNotFollowBack, {
+    excludeResolved: true,
+    excludeProtected: true,
+    excludeExclusionRules: true,
+  });
 }
 
 export async function listMutuals(input: PaginatedListInput) {
-  return listFromBreakdown(input, (b) => b.mutuals, { excludeResolved: false, excludeProtected: false });
+  return listFromBreakdown(input, (b) => b.mutuals, {
+    excludeResolved: false,
+    excludeProtected: false,
+    excludeExclusionRules: false,
+  });
 }
 
 export async function listYouDontFollowBack(input: PaginatedListInput) {
-  return listFromBreakdown(input, (b) => b.youDontFollowBack, { excludeResolved: false, excludeProtected: false });
+  return listFromBreakdown(input, (b) => b.youDontFollowBack, {
+    excludeResolved: false,
+    excludeProtected: false,
+    excludeExclusionRules: false,
+  });
 }
 
 export async function checkAccount(input: CheckAccountInput) {
@@ -152,9 +186,13 @@ export async function listRecentUnfollowers(input: ListRecentUnfollowersInput) {
   if (allEvents === undefined) {
     return NO_DATA_RESULT;
   }
-  const protectedUsernames = input.includeProtected ? new Set<string>() : await getProtectedUsernames();
-  const events =
-    protectedUsernames.size === 0 ? allEvents : allEvents.filter((e) => !protectedUsernames.has(e.normalizedUsername));
+  const [protectedUsernames, exclusionRules] = await Promise.all([
+    input.includeProtected ? Promise.resolve(new Set<string>()) : getProtectedUsernames(),
+    getExclusionRules(),
+  ]);
+  const events = allEvents.filter(
+    (e) => !protectedUsernames.has(e.normalizedUsername) && !matchesAnyExclusionRule(e.normalizedUsername, exclusionRules)
+  );
   const hiddenForProtection = allEvents.length - events.length;
 
   if (events.length === 0) {
@@ -167,7 +205,7 @@ export async function listRecentUnfollowers(input: ListRecentUnfollowersInput) {
         snapshotCount < 2
           ? "Only one snapshot has been imported, so there's no history to compare — this requires at least two imports over time."
           : hiddenForProtection > 0
-            ? "No lost followers to show — the only ones detected are accounts marked protected. Ask to include protected accounts to see them."
+            ? "No lost followers to show — the only ones detected are accounts marked protected or matching an exclusion rule. Ask to include protected accounts to see them (exclusion rules have no override)."
             : "No lost followers detected between any of the imported snapshots.",
     };
   }
@@ -291,10 +329,10 @@ export async function exportListAsCSV(input: ExportListAsCSVInput) {
         ? breakdown.doesNotFollowBack
         : breakdown.youDontFollowBack;
 
-  // notFollowingBack mirrors listDoesNotFollowBack's resolved-queue and
-  // protected-account exclusions, so an export matches what the chat would
-  // say if asked right now — mutuals/nonMutualFollowers have no such concept
-  // (see getResolvedUsernames above).
+  // notFollowingBack mirrors listDoesNotFollowBack's resolved-queue,
+  // protected-account, and exclusion-rule filtering, so an export matches
+  // what the chat would say if asked right now — mutuals/nonMutualFollowers
+  // have no such concept (see getResolvedUsernames above).
   let filtered = picked;
   if (listType === "notFollowingBack") {
     const resolved = await getResolvedUsernames();
@@ -302,6 +340,10 @@ export async function exportListAsCSV(input: ExportListAsCSVInput) {
     if (!input.includeProtected) {
       const protectedUsernames = await getProtectedUsernames();
       if (protectedUsernames.size > 0) filtered = filtered.filter((r) => !protectedUsernames.has(r.normalizedUsername));
+    }
+    const exclusionRules = await getExclusionRules();
+    if (exclusionRules.length > 0) {
+      filtered = filtered.filter((r) => !matchesAnyExclusionRule(r.normalizedUsername, exclusionRules));
     }
   }
 
@@ -354,4 +396,34 @@ export async function listProtectedAccounts() {
       dateAdded: a.dateAdded,
     })),
   };
+}
+
+function formatRule(r: ExclusionRuleRecord) {
+  return { pattern: r.rawPattern, matchMode: r.matchMode, note: r.note, createdAt: r.createdAt };
+}
+
+/**
+ * Adds a persistent, pattern-based "never suggest or include this" rule,
+ * matched against username only. Instagram's export has no bio field, so a
+ * rule can never actually match bio text — the tool description and system
+ * prompt are responsible for telling the model to say so plainly rather
+ * than silently downgrading a bio request to a username match.
+ */
+export async function addExclusionRule(input: AddExclusionRuleInput) {
+  const record = await dbAddExclusionRule({
+    rawPattern: input.pattern,
+    matchMode: input.matchMode ?? "contains",
+    note: input.note ?? null,
+  });
+  return { available: true as const, rule: formatRule(record) };
+}
+
+export async function removeExclusionRule(input: RemoveExclusionRuleInput) {
+  const wasRemoved = await dbRemoveExclusionRule(input.pattern);
+  return { available: true as const, pattern: input.pattern, wasRemoved };
+}
+
+export async function listExclusionRules() {
+  const rules = await getExclusionRules();
+  return { available: true as const, total: rules.length, rules: rules.map(formatRule) };
 }

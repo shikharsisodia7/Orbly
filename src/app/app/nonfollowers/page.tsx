@@ -9,18 +9,24 @@ import { Heart } from "lucide-react";
 import { useCurrentRelationships } from "@/hooks/useRelationships";
 import { useResolvedUsernames } from "@/hooks/useResolvedUsernames";
 import { useProtectedUsernames } from "@/hooks/useProtectedUsernames";
+import { useExclusionRules } from "@/hooks/useExclusionRules";
+import { matchesAnyExclusionRule } from "@/lib/instagram/exclusion-rules";
 
 function NonfollowersContent({ snapshotId }: { snapshotId: string }) {
   const relationships = useCurrentRelationships(snapshotId);
   const resolved = useResolvedUsernames();
   const protectedUsernames = useProtectedUsernames();
+  const exclusionRules = useExclusionRules();
 
   const active = useMemo(() => {
     if (!relationships) return [];
     return relationships.doesNotFollowBack.filter(
-      (r) => !resolved.has(r.normalizedUsername) && !protectedUsernames.has(r.normalizedUsername)
+      (r) =>
+        !resolved.has(r.normalizedUsername) &&
+        !protectedUsernames.has(r.normalizedUsername) &&
+        !matchesAnyExclusionRule(r.normalizedUsername, exclusionRules)
     );
-  }, [relationships, resolved, protectedUsernames]);
+  }, [relationships, resolved, protectedUsernames, exclusionRules]);
 
   if (!relationships) return null;
 
@@ -37,9 +43,10 @@ function NonfollowersContent({ snapshotId }: { snapshotId: string }) {
       {hiddenCount > 0 && (
         <p className="mb-4 rounded-lg bg-surface px-3 py-2 text-xs text-ink-soft">
           {hiddenCount} {hiddenCount === 1 ? "account is" : "accounts are"} hidden because you
-          already marked {hiddenCount === 1 ? "it" : "them"} done or skipped in your queue, or
-          protected {hiddenCount === 1 ? "it" : "them"}. They stay hidden across every future import
-          too, until you undo that in the queue or your protected accounts.
+          already marked {hiddenCount === 1 ? "it" : "them"} done or skipped in your queue, protected
+          {hiddenCount === 1 ? " it" : " them"}, or {hiddenCount === 1 ? "it matches" : "they match"} an
+          exclusion rule. They stay hidden across every future import too, until you undo that in the
+          queue, your protected accounts, or your exclusion rules.
         </p>
       )}
 

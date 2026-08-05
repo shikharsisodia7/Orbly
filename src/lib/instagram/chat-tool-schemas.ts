@@ -82,6 +82,31 @@ export const unprotectAccountInputSchema = z.object({
 });
 export type UnprotectAccountInput = z.infer<typeof unprotectAccountInputSchema>;
 
+export const addExclusionRuleInputSchema = z.object({
+  pattern: z
+    .string()
+    .trim()
+    .min(1)
+    .max(60)
+    .describe(
+      "The text to match against usernames — a word, name fragment, or short string, e.g. \"nba\" or \"official\". This is matched ONLY against username text; Instagram's export has no bio field, so a pattern can never actually match bio content no matter how the request was phrased."
+    ),
+  matchMode: matchModeSchema,
+  note: z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .optional()
+    .describe("Optional short reason for the rule, e.g. \"keeping these regardless of follow-back status\". Never invent one the user didn't give."),
+});
+export type AddExclusionRuleInput = z.infer<typeof addExclusionRuleInputSchema>;
+
+export const removeExclusionRuleInputSchema = z.object({
+  pattern: z.string().describe("The exact pattern text of the rule to remove, as it was originally added."),
+});
+export type RemoveExclusionRuleInput = z.infer<typeof removeExclusionRuleInputSchema>;
+
 export const emptyInputSchema = z.object({});
 
 export const csvListTypeSchema = z.enum([
@@ -144,4 +169,10 @@ export const CHAT_TOOL_DESCRIPTIONS = {
     "Remove protection from a username, making it eligible again for unfollow suggestions, the unfollow queue, and CSV exports. Call this when the user says something like \"unprotect @username\" or \"stop protecting @username\" or \"I don't need @username protected anymore.\"",
   listProtectedAccounts:
     "List every account the user has marked protected, with its label (if any) and the date it was protected. Call this when the user asks things like \"who have I protected\" or \"show me my protected accounts.\"",
+  addExclusionRule:
+    "Add a persistent, pattern-based exclusion rule that hides every username matching it — now AND in every future re-import — from doesNotFollowBack, recent-unfollower results, the unfollow queue's suggestions, and CSV exports, with NO override (unlike protected accounts, there is no 'show me anyway' for an exclusion rule). Use this instead of protectAccount when the user describes a CATEGORY or pattern rather than one specific username — e.g. \"don't ever suggest unfollowing anything with nba in the name\" or \"never touch accounts ending in _official\", or \"keep everyone with fitness in their username regardless of whether they follow back.\" Pick matchMode from the same rules as query filtering (contains/startsWith/endsWith). IMPORTANT: this can only ever match on USERNAME TEXT — Instagram's export has no bio field, so if the user asks to exclude by bio content (e.g. \"anyone whose bio mentions crypto\"), do not call this tool and claim it worked; tell them plainly that Orbly has no bio data and ask if a username-based rule would help instead.",
+  removeExclusionRule:
+    "Remove a previously added exclusion rule by its exact pattern text, making matching accounts eligible again for unfollow suggestions. Call this when the user says something like \"remove that nba exclusion rule\" or \"stop excluding accounts with fitness in the name.\"",
+  listExclusionRules:
+    "List every active exclusion rule (pattern, match mode, and note if any). Call this when the user asks things like \"what exclusion rules do I have\" or \"what am I keeping regardless of follow-back status.\"",
 } as const;

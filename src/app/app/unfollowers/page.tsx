@@ -13,6 +13,8 @@ import { useSnapshots } from "@/hooks/useSnapshots";
 import { useLostFollowerEvents } from "@/hooks/useLostFollowerEvents";
 import { useQueueUsernames } from "@/hooks/useQueueUsernames";
 import { useProtectedUsernames } from "@/hooks/useProtectedUsernames";
+import { useExclusionRules } from "@/hooks/useExclusionRules";
+import { matchesAnyExclusionRule } from "@/lib/instagram/exclusion-rules";
 import { addManyToQueue } from "@/lib/db/queries";
 import { formatDateRange } from "@/lib/utils/format";
 import { cn } from "@/lib/utils/cn";
@@ -26,6 +28,7 @@ export default function UnfollowersPage() {
   const events = useLostFollowerEvents();
   const queuedUsernames = useQueueUsernames();
   const protectedUsernames = useProtectedUsernames();
+  const exclusionRules = useExclusionRules();
   const [period, setPeriod] = useState<PeriodFilter>("all");
   const [followingFilter, setFollowingFilter] = useState<FollowingFilter>("all");
   const [addedUsernames, setAddedUsernames] = useState<Set<string>>(new Set());
@@ -33,7 +36,9 @@ export default function UnfollowersPage() {
 
   const filtered = useMemo(() => {
     if (!events) return [];
-    let list = events.filter((e) => !protectedUsernames.has(e.normalizedUsername));
+    let list = events.filter(
+      (e) => !protectedUsernames.has(e.normalizedUsername) && !matchesAnyExclusionRule(e.normalizedUsername, exclusionRules)
+    );
 
     if (period === "latest" && snapshots && snapshots.length >= 2) {
       const latestPairTo = snapshots[0].id;
@@ -47,7 +52,7 @@ export default function UnfollowersPage() {
     if (followingFilter === "not") list = list.filter((e) => !e.stillFollowingThem);
 
     return list;
-  }, [events, period, followingFilter, snapshots, now, protectedUsernames]);
+  }, [events, period, followingFilter, snapshots, now, protectedUsernames, exclusionRules]);
 
   async function handleAddOne(event: (typeof filtered)[number]) {
     await addManyToQueue([

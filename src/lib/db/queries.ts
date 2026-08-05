@@ -1,5 +1,9 @@
 import { getDb } from "./index";
 import type {
+  ExclusionMatchMode,
+  ExclusionRuleRecord,
+  FeedbackCategory,
+  FeedbackReportRecord,
   ProtectedAccountRecord,
   QueueItemRecord,
   QueueSource,
@@ -12,6 +16,7 @@ import type {
 import type { ExportCoverage, Relationship } from "@/lib/instagram/types";
 import { PARSER_VERSION } from "@/lib/instagram/parser";
 import { assessDatasetValidity, type ProfileReferenceCounts } from "@/lib/instagram/validity";
+import { normalizeQueryText } from "@/lib/instagram/text-match";
 
 function newId(): string {
   return crypto.randomUUID();
@@ -160,7 +165,16 @@ export async function deleteAllData(): Promise<void> {
   const db = getDb();
   await db.transaction(
     "rw",
-    [db.snapshots, db.snapshotFollowers, db.snapshotFollowing, db.queueItems, db.settings, db.protectedAccounts],
+    [
+      db.snapshots,
+      db.snapshotFollowers,
+      db.snapshotFollowing,
+      db.queueItems,
+      db.settings,
+      db.protectedAccounts,
+      db.exclusionRules,
+      db.feedbackReports,
+    ],
     async () => {
       await db.snapshots.clear();
       await db.snapshotFollowers.clear();
@@ -168,6 +182,8 @@ export async function deleteAllData(): Promise<void> {
       await db.queueItems.clear();
       await db.settings.clear();
       await db.protectedAccounts.clear();
+      await db.exclusionRules.clear();
+      await db.feedbackReports.clear();
     }
   );
 }
@@ -367,4 +383,94 @@ export async function updateSettings(patch: Partial<SettingsRecord>): Promise<Se
   const next = { ...current, ...patch };
   await db.settings.put(next);
   return next;
+}
+
+// --- Exclusion rules (pattern-based, persistent "never touch these") ---
+
+export interface AddExclusionRuleInput {
+  rawPattern: string;
+  matchMode: ExclusionMatchMode;
+  note?: string | null;
+}
+
+/**
+ * Adds a persistent exclusion rule, or updates the existing rule's mode/note
+ * if the same normalized pattern is added again — &pattern is a unique
+ * index, so this never creates a duplicate rule for the same text.
+ */
+export async function addExclusionRule(input: AddExclusionRuleInput): Promise<ExclusionRuleRecord> {
+  const db = getDb();
+  const pattern = normalizeQueryText(input.rawPattern);
+  const existing = await db.exclusionRules.where("pattern").equals(pattern).first();
+  if (existing) {
+    const updated: ExclusionRuleRecord = {
+      ...existing,
+      matchMode: input.matchMode,
+      note: input.note ?? existing.note,
+    };
+    await db.exclusionRules.put(updated);
+    return updated;
+  }
+  const record: ExclusionRuleRecord = {
+    id: newId(),
+    pattern,
+    rawPattern: input.rawPattern.trim(),
+    matchMode: input.matchMode,
+    note: input.note ?? null,
+    createdAt: new Date().toISOString(),
+  };
+  await db.exclusionRules.add(record);
+  return record;
+}
+
+/** Returns true if a matching rule was found and removed, false if there was nothing to remove. */
+export async function removeExclusionRule(rawPattern: string): Promise<boolean> {
+  const db = getDb();
+  const pattern = normalizeQueryText(rawPattern);
+  const existing = await db.exclusionRules.where("pattern").equals(pattern).first();
+  if (!existing) return false;
+  await db.exclusionRules.delete(existing.id);
+  return true;
+}
+
+export async function getExclusionRules(): Promise<ExclusionRuleRecord[]> {
+  const all = await getDb().exclusionRules.toArray();
+  return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+// --- Feedback reports (self-service, in-app bug reports) ---
+
+export interface SubmitFeedbackInput {
+  message: string;
+  category: FeedbackCategory;
+  pageContext?: string | null;
+}
+
+export async function submitFeedback(input: SubmitFeedbackInput): Promise<FeedbackReportRecord> {
+  const record: FeedbackReportRecord = {
+    id: newId(),
+    message: input.message.trim(),
+    category: input.category,
+    status: "new",
+    pageContext: input.pageContext ?? null,
+    createdAt: new Date().toISOString(),
+  };
+  await getDb().feedbackReports.add(record);
+  return record;
+}
+
+export async function getFeedbackReports(): Promise<FeedbackReportRecord[]> {
+  const all = await getDb().feedbackReports.toArray();
+  return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function updateFeedbackStatus(
+  id: string,
+  status: FeedbackReportRecord["status"]
+): Promise<void> {
+  await getDb().feedbackReports.update(id, { status });
+}
+
+export async function deleteFeedbackReport(id: string): Promise<void> {
+  await getDb().feedbackReports.delete(id);
 }

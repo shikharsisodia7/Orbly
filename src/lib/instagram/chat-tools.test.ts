@@ -9,13 +9,16 @@ import {
   updateQueueItemStatus,
 } from "@/lib/db/queries";
 import {
+  addExclusionRule,
   exportListAsCSV,
   getAccountStats,
   listDoesNotFollowBack,
+  listExclusionRules,
   listMutuals,
   listProtectedAccounts,
   listRecentUnfollowers,
   protectAccount,
+  removeExclusionRule,
   unprotectAccount,
 } from "./chat-tools";
 import type { Relationship } from "./types";
@@ -417,5 +420,164 @@ describe("listRecentUnfollowers — protected-account exclusion", () => {
     const includingProtected = await listRecentUnfollowers({ includeProtected: true });
     if (!includingProtected.available) throw new Error("expected data to be available");
     expect(includingProtected.events.map((e) => e.username)).toEqual(["bob"]);
+  });
+});
+
+describe("exclusion rules — persistent pattern-based blocking", () => {
+  it("hides every matching account from listDoesNotFollowBack, with no override", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("nba_fan"), rel("official_nba"), rel("charlie")],
+      datasetHash: "excl-1",
+      originalFileName: null,
+    });
+
+    const before = await listDoesNotFollowBack({});
+    if (!before.available) throw new Error("expected data to be available");
+    expect(before.result.items.map((i) => i.username).sort()).toEqual(["charlie", "nba_fan", "official_nba"]);
+
+    await addExclusionRule({ pattern: "nba", matchMode: "contains" });
+
+    const after = await listDoesNotFollowBack({});
+    if (!after.available) throw new Error("expected data to be available");
+    expect(after.result.items.map((i) => i.username)).toEqual(["charlie"]);
+
+    // Unlike protected accounts, includeProtected has no effect on an
+    // exclusion rule — it's a hard block with no override anywhere.
+    const withIncludeProtected = await listDoesNotFollowBack({ includeProtected: true });
+    if (!withIncludeProtected.available) throw new Error("expected data to be available");
+    expect(withIncludeProtected.result.items.map((i) => i.username)).toEqual(["charlie"]);
+  });
+
+  it("applies matchMode strictly (startsWith doesn't match mid-string)", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("nba_official"), rel("my_nba_fan")],
+      datasetHash: "excl-2",
+      originalFileName: null,
+    });
+    await addExclusionRule({ pattern: "nba", matchMode: "startsWith" });
+
+    const result = await listDoesNotFollowBack({});
+    if (!result.available) throw new Error("expected data to be available");
+    expect(result.result.items.map((i) => i.username)).toEqual(["my_nba_fan"]);
+  });
+
+  it("excludes matching accounts from getAccountStats' outstanding count", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("nba_fan"), rel("charlie")],
+      datasetHash: "excl-3",
+      originalFileName: null,
+    });
+    await addExclusionRule({ pattern: "nba", matchMode: "contains" });
+
+    const stats = await getAccountStats();
+    if (!stats.available) throw new Error("expected data to be available");
+    expect(stats.doesNotFollowBackCount).toBe(1);
+  });
+
+  it("excludes matching accounts from a notFollowingBack CSV export", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("nba_fan"), rel("charlie")],
+      datasetHash: "excl-4",
+      originalFileName: null,
+    });
+    await addExclusionRule({ pattern: "nba", matchMode: "contains" });
+
+    const csv = await exportListAsCSV({ listType: "notFollowingBack" });
+    if (!csv.available) throw new Error("expected data to be available");
+    expect(csv.csv).not.toContain("nba_fan");
+    expect(csv.csv).toContain("charlie");
+  });
+
+  it("excludes matching accounts from listRecentUnfollowers", async () => {
+    await createSnapshot({
+      followers: [rel("nba_fan"), rel("bob")],
+      following: [rel("alice")],
+      datasetHash: "excl-5a",
+      originalFileName: null,
+    });
+    await new Promise((r) => setTimeout(r, 5));
+    await createSnapshot({
+      followers: [rel("charlie")],
+      following: [rel("alice")],
+      datasetHash: "excl-5b",
+      originalFileName: null,
+    });
+    await addExclusionRule({ pattern: "nba", matchMode: "contains" });
+
+    const result = await listRecentUnfollowers({});
+    if (!result.available) throw new Error("expected data to be available");
+    expect(result.events.map((e) => e.username)).toEqual(["bob"]);
+  });
+
+  it("does NOT filter mutuals or you-don't-follow-back — exclusion rules are only for unfollow-suggestion lists", async () => {
+    await createSnapshot({
+      followers: [rel("nba_fan")],
+      following: [rel("nba_fan")],
+      datasetHash: "excl-6",
+      originalFileName: null,
+    });
+    await addExclusionRule({ pattern: "nba", matchMode: "contains" });
+
+    const mutuals = await listMutuals({});
+    if (!mutuals.available) throw new Error("expected data to be available");
+    expect(mutuals.result.items.map((i) => i.username)).toEqual(["nba_fan"]);
+  });
+
+  it("removeExclusionRule reverses the rule by exact pattern text", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("nba_fan")],
+      datasetHash: "excl-7",
+      originalFileName: null,
+    });
+    await addExclusionRule({ pattern: "nba", matchMode: "contains" });
+    const excluded = await listDoesNotFollowBack({});
+    if (!excluded.available) throw new Error("expected data to be available");
+    expect(excluded.result.items).toEqual([]);
+
+    const removal = await removeExclusionRule({ pattern: "nba" });
+    expect(removal.wasRemoved).toBe(true);
+
+    const after = await listDoesNotFollowBack({});
+    if (!after.available) throw new Error("expected data to be available");
+    expect(after.result.items.map((i) => i.username)).toEqual(["nba_fan"]);
+  });
+
+  it("removeExclusionRule reports wasRemoved: false for a pattern that was never added", async () => {
+    const result = await removeExclusionRule({ pattern: "doesnotexist" });
+    expect(result.wasRemoved).toBe(false);
+  });
+
+  it("listExclusionRules dedupes by normalized pattern, displaying the original casing and updating matchMode/note", async () => {
+    await addExclusionRule({ pattern: "NBA", matchMode: "contains", note: "keep sports pages" });
+    // Same normalized pattern ("nba") as above — updates the existing rule's
+    // mode rather than creating a second one; the displayed pattern text
+    // (rawPattern) stays as originally entered, and the note is preserved
+    // since this call didn't supply a new one.
+    await addExclusionRule({ pattern: " nba ", matchMode: "startsWith" });
+
+    const rules = await listExclusionRules();
+    expect(rules.total).toBe(1);
+    expect(rules.rules[0].pattern).toBe("NBA");
+    expect(rules.rules[0].matchMode).toBe("startsWith");
+    expect(rules.rules[0].note).toBe("keep sports pages");
+
+    // The underlying match, meanwhile, is always evaluated against the
+    // normalized pattern regardless of display casing — and the final mode
+    // is startsWith, so "official_nba" (contains but doesn't start with
+    // "nba") stays visible while a startsWith match would be excluded.
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("official_nba")],
+      datasetHash: "excl-8",
+      originalFileName: null,
+    });
+    const result = await listDoesNotFollowBack({});
+    if (!result.available) throw new Error("expected data to be available");
+    expect(result.result.items.map((i) => i.username)).toEqual(["official_nba"]);
   });
 });

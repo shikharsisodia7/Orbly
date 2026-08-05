@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { deleteAllData, protectAccount, getProtectedAccounts } from "@/lib/db/queries";
+import {
+  deleteAllData,
+  getExclusionRules,
+  getFeedbackReports,
+  protectAccount,
+  getProtectedAccounts,
+  submitFeedback,
+  addExclusionRule as dbAddExclusionRule,
+} from "@/lib/db/queries";
 import { buildBackup, parseBackupFile, restoreBackup } from "./index";
 
 /**
@@ -74,5 +82,49 @@ describe("backup includes protected accounts", () => {
     await restoreBackup(backupWithoutIt);
 
     expect(await getProtectedAccounts()).toHaveLength(0);
+  });
+});
+
+describe("backup includes exclusion rules and feedback reports", () => {
+  it("round-trips an exclusion rule and a feedback report through export and restore", async () => {
+    await dbAddExclusionRule({ rawPattern: "nba", matchMode: "startsWith", note: "sports pages" });
+    await submitFeedback({ message: "Marked someone unfollowed but they came back", category: "stale-data" });
+
+    const backup = await buildBackup();
+    expect(backup.exclusionRules).toHaveLength(1);
+    expect(backup.feedbackReports).toHaveLength(1);
+
+    await deleteAllData();
+    expect(await getExclusionRules()).toHaveLength(0);
+    expect(await getFeedbackReports()).toHaveLength(0);
+
+    const reparsed = parseBackupFile(JSON.stringify(backup));
+    await restoreBackup(reparsed);
+
+    const restoredRules = await getExclusionRules();
+    expect(restoredRules).toHaveLength(1);
+    expect(restoredRules[0].pattern).toBe("nba");
+
+    const restoredFeedback = await getFeedbackReports();
+    expect(restoredFeedback).toHaveLength(1);
+    expect(restoredFeedback[0].category).toBe("stale-data");
+  });
+
+  it("restores as empty (not a crash) for a backup predating both features", async () => {
+    const legacyBackup = {
+      schemaVersion: 3,
+      exportedAt: new Date().toISOString(),
+      snapshots: [],
+      snapshotFollowers: [],
+      snapshotFollowing: [],
+      queueItems: [],
+      settings: null,
+      protectedAccounts: [],
+      // exclusionRules and feedbackReports intentionally absent
+    };
+    const parsed = parseBackupFile(JSON.stringify(legacyBackup));
+    await expect(restoreBackup(parsed)).resolves.not.toThrow();
+    expect(await getExclusionRules()).toHaveLength(0);
+    expect(await getFeedbackReports()).toHaveLength(0);
   });
 });

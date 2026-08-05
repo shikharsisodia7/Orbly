@@ -12,6 +12,7 @@ import { Dropzone } from "@/components/import/Dropzone";
 import { ExportWizard } from "@/components/import/ExportWizard";
 import { ProcessingStages, type ProcessingStageId } from "@/components/import/ProcessingStages";
 import { ToolResultCard } from "@/components/chat/ToolResultCard";
+import { ChatMarkdown } from "@/components/chat/ChatMarkdown";
 import { Dialog } from "@/components/ui/Dialog";
 import { useSnapshots } from "@/hooks/useSnapshots";
 import { parseInstagramExport } from "@/lib/instagram/parser";
@@ -24,26 +25,31 @@ import {
   updateSettings,
 } from "@/lib/db/queries";
 import {
+  addExclusionRule,
   checkAccount,
   exportListAsCSV,
   getAccountStats,
   getQueueStatus,
   listDoesNotFollowBack,
+  listExclusionRules,
   listMutuals,
   listProtectedAccounts,
   listRecentUnfollowers,
   listSnapshots,
   listYouDontFollowBack,
   protectAccount,
+  removeExclusionRule,
   unprotectAccount,
 } from "@/lib/instagram/chat-tools";
 import {
+  addExclusionRuleInputSchema,
   checkAccountInputSchema,
   doesNotFollowBackInputSchema,
   exportListAsCSVInputSchema,
   listRecentUnfollowersInputSchema,
   paginatedListInputSchema,
   protectAccountInputSchema,
+  removeExclusionRuleInputSchema,
   unprotectAccountInputSchema,
 } from "@/lib/instagram/chat-tool-schemas";
 import { cn } from "@/lib/utils/cn";
@@ -210,6 +216,21 @@ export default function ChatPage() {
           case "listProtectedAccounts": {
             const output = await listProtectedAccounts();
             addToolOutput({ tool: "listProtectedAccounts", toolCallId: toolCall.toolCallId, output });
+            return;
+          }
+          case "addExclusionRule": {
+            const output = await addExclusionRule(addExclusionRuleInputSchema.parse(toolCall.input));
+            addToolOutput({ tool: "addExclusionRule", toolCallId: toolCall.toolCallId, output });
+            return;
+          }
+          case "removeExclusionRule": {
+            const output = await removeExclusionRule(removeExclusionRuleInputSchema.parse(toolCall.input));
+            addToolOutput({ tool: "removeExclusionRule", toolCallId: toolCall.toolCallId, output });
+            return;
+          }
+          case "listExclusionRules": {
+            const output = await listExclusionRules();
+            addToolOutput({ tool: "listExclusionRules", toolCallId: toolCall.toolCallId, output });
             return;
           }
         }
@@ -406,12 +427,12 @@ export default function ChatPage() {
                           animate={{ opacity: 1 }}
                           transition={{ duration: 0.2 }}
                           className={cn(
-                            "whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm",
-                            message.role === "user" ? "bg-ink text-white" : "bg-surface text-ink",
+                            "rounded-2xl px-3.5 py-2 text-sm",
+                            message.role === "user" ? "whitespace-pre-wrap bg-ink text-white" : "bg-surface text-ink",
                             isActivelyStreaming && "shadow-[0_0_0_1px_rgba(150,47,191,0.15)]"
                           )}
                         >
-                          {part.text}
+                          {message.role === "assistant" ? <ChatMarkdown text={part.text} /> : part.text}
                           {isActivelyStreaming && (
                             <motion.span
                               className="ml-0.5 inline-block h-3.5 w-[3px] translate-y-0.5 rounded-full bg-violet align-middle"

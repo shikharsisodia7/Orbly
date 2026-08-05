@@ -1,5 +1,7 @@
 import Dexie, { type EntityTable } from "dexie";
 import type {
+  ExclusionRuleRecord,
+  FeedbackReportRecord,
   ProtectedAccountRecord,
   QueueItemRecord,
   SettingsRecord,
@@ -16,6 +18,8 @@ export class OrblyDatabase extends Dexie {
   queueItems!: EntityTable<QueueItemRecord, "id">;
   settings!: EntityTable<SettingsRecord, "id">;
   protectedAccounts!: EntityTable<ProtectedAccountRecord, "id">;
+  exclusionRules!: EntityTable<ExclusionRuleRecord, "id">;
+  feedbackReports!: EntityTable<FeedbackReportRecord, "id">;
 
   constructor(name = "orbly-local") {
     super(name);
@@ -61,6 +65,21 @@ export class OrblyDatabase extends Dexie {
       queueItems: "id, normalizedUsername, status, source, addedAt",
       settings: "id",
       protectedAccounts: "id, &normalizedUsername, dateAdded",
+    });
+
+    // Adds pattern-based exclusion rules (e.g. "nothing with nba in the
+    // name") and self-service feedback reports — both new, independent
+    // tables, so this migration only adds stores and touches no existing
+    // data.
+    this.version(4).stores({
+      snapshots: "id, createdAt, datasetHash, validity",
+      snapshotFollowers: "id, snapshotId, [snapshotId+normalizedUsername], normalizedUsername",
+      snapshotFollowing: "id, snapshotId, [snapshotId+normalizedUsername], normalizedUsername",
+      queueItems: "id, normalizedUsername, status, source, addedAt",
+      settings: "id",
+      protectedAccounts: "id, &normalizedUsername, dateAdded",
+      exclusionRules: "id, &pattern, createdAt",
+      feedbackReports: "id, category, status, createdAt",
     });
   }
 }

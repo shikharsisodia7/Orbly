@@ -83,4 +83,55 @@ export interface ProtectedAccountRecord {
   dateAdded: string; // ISO timestamp
 }
 
-export const SCHEMA_VERSION = 3;
+export type ExclusionMatchMode = "contains" | "startsWith" | "endsWith";
+
+/**
+ * A pattern-based, persistent "never touch these" rule — distinct from
+ * ProtectedAccountRecord, which pins one specific already-known username.
+ * This instead matches against USERNAME text (Instagram's export has no
+ * bio field, so a rule can only ever match on username) for every account,
+ * present now or appearing in any future re-import, so a rule like "nothing
+ * with nba in the name" keeps working on accounts that don't exist yet.
+ * Applied everywhere ProtectedAccountRecord is: doesNotFollowBack, recent
+ * unfollowers, the queue's suggestions, CSV exports.
+ */
+export interface ExclusionRuleRecord {
+  id: string;
+  /** Normalized (trimmed, lowercased, @ stripped) — what's actually matched against. */
+  pattern: string;
+  /** Exactly what the user typed, for display. */
+  rawPattern: string;
+  matchMode: ExclusionMatchMode;
+  /** Freeform reason, e.g. "keeping these regardless of follow-back status". */
+  note: string | null;
+  createdAt: string; // ISO timestamp
+}
+
+export type FeedbackCategory =
+  | "stale-data"
+  | "not-saving"
+  | "wrong-count"
+  | "ui-issue"
+  | "feature-request"
+  | "other";
+
+export type FeedbackStatus = "new" | "auto-resolved" | "reviewed";
+
+/**
+ * A self-service bug report or feedback note, submitted from inside the app
+ * (Help & Feedback page) instead of requiring terminal/GitHub access.
+ * Stored locally like everything else in Orbly — never sent anywhere — and
+ * keyword-triaged into `category` so a matching known issue can offer an
+ * immediate in-app fix (see triage.ts) rather than just sitting unread.
+ */
+export interface FeedbackReportRecord {
+  id: string;
+  message: string;
+  category: FeedbackCategory;
+  status: FeedbackStatus;
+  /** Which page the user was on when they opened the feedback form, if known. */
+  pageContext: string | null;
+  createdAt: string; // ISO timestamp
+}
+
+export const SCHEMA_VERSION = 4;

@@ -1,6 +1,7 @@
 import { convertToModelMessages, createUIMessageStreamResponse, streamText, toUIMessageStream, type UIMessage } from "ai";
 import {
   CHAT_TOOL_DESCRIPTIONS,
+  addExclusionRuleInputSchema,
   checkAccountInputSchema,
   doesNotFollowBackInputSchema,
   emptyInputSchema,
@@ -8,6 +9,7 @@ import {
   listRecentUnfollowersInputSchema,
   paginatedListInputSchema,
   protectAccountInputSchema,
+  removeExclusionRuleInputSchema,
   unprotectAccountInputSchema,
 } from "@/lib/instagram/chat-tool-schemas";
 
@@ -29,6 +31,8 @@ When a user asks how to unfollow accounts, don't claim Orbly can unfollow anyone
 
 The user can permanently protect specific accounts from ever showing up in unfollow suggestions, using protectAccount (with an optional label like "verified," "brand/venue," "close friend," or any custom tag they choose), unprotectAccount to reverse it, and listProtectedAccounts to see the full list. Protected accounts stay excluded from doesNotFollowBack, recent-unfollower results, the unfollow queue, and CSV exports across every future import — call protectAccount when the user says things like "don't ever suggest unfollowing @username," "mark this account as protected," or "tag @username as [label]." Orbly cannot detect verification status, business/brand status, or any other account attribute from the data it has — if the user asks to protect a whole category like "verified accounts" or "brands," never claim to auto-detect matching accounts; ask them to name the specific usernames, or offer to protect them one at a time as they come up in the conversation. If the user wants to see protected accounts included in a list anyway, they have to say so explicitly (e.g. "including protected ones") — don't include them by default.
 
+For a whole CATEGORY rather than one named account — "don't ever suggest unfollowing anything with nba in the name," "never touch accounts ending in _official," "keep everyone with fitness in their username no matter what" — use addExclusionRule instead of protectAccount. It's a persistent, pattern-based rule (pick matchMode the same way you would for a query filter) that keeps matching every future re-import too, and unlike protected accounts it has NO "show me anyway" override — once set, matching accounts are never suggested or included in doesNotFollowBack, recent unfollowers, the queue, or CSV exports, full stop. removeExclusionRule and listExclusionRules manage existing rules. A rule can only ever match USERNAME TEXT, because Instagram's export contains no bio field at all — if the user asks to exclude by something in someone's bio, do not call addExclusionRule and pretend it worked; tell them directly that Orbly has no bio data to match against, and offer a username-based rule as the closest alternative if one makes sense.
+
 Orbly has no live connection to Instagram and cannot detect changes in real time — it only knows what changed between two snapshots the user has actually imported, so never imply live or ongoing monitoring. If asked for "always up to date without re-uploading," explain this plainly and point them at the "Update Instagram data" button at the top of the chat page for getting a fresh snapshot — that's the only mechanism for freshness, not automation.
 
 If asked how to get their Instagram export, or if a tool reports "available: false" because no data has been imported yet, walk them through the existing upload flow rather than describing a separate page: there's a drag-and-drop upload zone right above this conversation, plus an expandable "Show me the steps" guide for first-time users who don't have their export file yet. The steps themselves: on Instagram, go to Settings → Accounts Center → Your information and permissions → Export your information → choose this profile → select only "Followers and following" → set Destination to "Download to device", Date range to "All time" (Meta often defaults to the last year only, which silently produces an incomplete list) → Format to "JSON". Meta notifies them when the ZIP is ready, and they upload it right here in the chat.
@@ -38,6 +42,8 @@ You cannot answer, and should say so plainly rather than guess: story views, pro
 Never state an exact date or time for a follow/unfollow event unless the export's own timestamp gives you one directly — snapshot comparisons only tell you a change happened between two import dates, so phrase those as a range, not a moment.
 
 If the user asks about a period before their first import, say you have no visibility before that snapshot rather than estimating.
+
+If the user reports something broken, wrong, or missing — a bug, a stale/incorrect count, a UI problem, or a feature they wish existed — point them at the Help & Feedback page (the message-square icon next to the settings gear, top right of this page) rather than just apologizing and moving on. It logs their report locally on this device and, for a few common issue types, offers a fix they can run immediately.
 
 Keep responses conversational and concise — this is a chat, not a report. Numbers and lists render as their own UI elements via tool calls, so your text should frame and interpret them, not repeat them verbatim. This also applies across turns: don't re-state a username, count, or fact the user already told you earlier in the conversation back to them as if it were new information — refer to it briefly ("that account," "the same list as before") instead of repeating it in full each time. you have the github: https://github.com/shikharsisodia7/Orbly and the vercel website: orbly-drab.vercel.app`;
 
@@ -95,6 +101,18 @@ export async function POST(req: Request) {
       },
       listProtectedAccounts: {
         description: CHAT_TOOL_DESCRIPTIONS.listProtectedAccounts,
+        inputSchema: emptyInputSchema,
+      },
+      addExclusionRule: {
+        description: CHAT_TOOL_DESCRIPTIONS.addExclusionRule,
+        inputSchema: addExclusionRuleInputSchema,
+      },
+      removeExclusionRule: {
+        description: CHAT_TOOL_DESCRIPTIONS.removeExclusionRule,
+        inputSchema: removeExclusionRuleInputSchema,
+      },
+      listExclusionRules: {
+        description: CHAT_TOOL_DESCRIPTIONS.listExclusionRules,
         inputSchema: emptyInputSchema,
       },
     },

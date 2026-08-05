@@ -1,6 +1,7 @@
 import type { Relationship } from "./types";
 import { computeCurrentRelationships } from "./comparisons";
 import type { CSVListType, MatchMode } from "./chat-tool-schemas";
+import { matchesQuery, normalizeQueryText } from "./text-match";
 
 /**
  * Pure, framework-agnostic helpers the AI chat feature uses to turn a
@@ -23,25 +24,6 @@ function toItem(rel: Relationship) {
 }
 
 /**
- * Strictly and deterministically matches a normalized username against a
- * query under the given mode. Each mode maps to exactly one JS string
- * method — no fuzzy/loose fallback — so "starts with a" can never
- * accidentally match a username with an "a" in the middle, and "contains 3"
- * can never accidentally require it at a specific position.
- */
-function matchesQuery(normalizedUsername: string, query: string, mode: MatchMode): boolean {
-  switch (mode) {
-    case "startsWith":
-      return normalizedUsername.startsWith(query);
-    case "endsWith":
-      return normalizedUsername.endsWith(query);
-    case "contains":
-    default:
-      return normalizedUsername.includes(query);
-  }
-}
-
-/**
  * Filters by a case-insensitive match on the username — contains (default),
  * startsWith, or endsWith, per `matchMode` — then paginates either by
  * numeric offset or by an `after` cursor.
@@ -61,7 +43,7 @@ export function searchAndPaginate(
   const { query, matchMode = "contains", offset = 0, after, limit = DEFAULT_LIMIT } = options;
   const boundedLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
 
-  const normalizedQuery = query?.trim().toLowerCase().replace(/^@+/, "");
+  const normalizedQuery = query ? normalizeQueryText(query) : undefined;
   const filtered = normalizedQuery
     ? list.filter((r) => matchesQuery(r.normalizedUsername, normalizedQuery, matchMode))
     : list;

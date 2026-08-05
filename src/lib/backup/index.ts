@@ -5,7 +5,7 @@ import { backupFileSchema, type BackupFile } from "./schema";
 
 export async function buildBackup(): Promise<BackupFile> {
   const db = getDb();
-  const [snapshots, snapshotFollowers, snapshotFollowing, queueItems, settings, protectedAccounts] =
+  const [snapshots, snapshotFollowers, snapshotFollowing, queueItems, settings, protectedAccounts, exclusionRules, feedbackReports] =
     await Promise.all([
       db.snapshots.toArray(),
       db.snapshotFollowers.toArray(),
@@ -13,6 +13,8 @@ export async function buildBackup(): Promise<BackupFile> {
       db.queueItems.toArray(),
       db.settings.get("app"),
       db.protectedAccounts.toArray(),
+      db.exclusionRules.toArray(),
+      db.feedbackReports.toArray(),
     ]);
 
   return {
@@ -24,6 +26,8 @@ export async function buildBackup(): Promise<BackupFile> {
     queueItems,
     settings: settings ?? null,
     protectedAccounts,
+    exclusionRules,
+    feedbackReports,
   };
 }
 
@@ -64,7 +68,16 @@ export async function restoreBackup(backup: BackupFile): Promise<void> {
   const db = getDb();
   await db.transaction(
     "rw",
-    [db.snapshots, db.snapshotFollowers, db.snapshotFollowing, db.queueItems, db.settings, db.protectedAccounts],
+    [
+      db.snapshots,
+      db.snapshotFollowers,
+      db.snapshotFollowing,
+      db.queueItems,
+      db.settings,
+      db.protectedAccounts,
+      db.exclusionRules,
+      db.feedbackReports,
+    ],
     async () => {
       await db.snapshots.clear();
       await db.snapshotFollowers.clear();
@@ -72,6 +85,8 @@ export async function restoreBackup(backup: BackupFile): Promise<void> {
       await db.queueItems.clear();
       await db.settings.clear();
       await db.protectedAccounts.clear();
+      await db.exclusionRules.clear();
+      await db.feedbackReports.clear();
 
       await db.snapshots.bulkAdd(backup.snapshots.map(normalizeSnapshotRecord));
       await db.snapshotFollowers.bulkAdd(backup.snapshotFollowers);
@@ -80,11 +95,17 @@ export async function restoreBackup(backup: BackupFile): Promise<void> {
       if (backup.settings) {
         await db.settings.put(backup.settings);
       }
-      // Optional: absent entirely on a backup made before protected accounts
+      // Optional: absent entirely on a backup made before that table
       // existed, so this must not throw on old files — treated as zero
-      // protected accounts to restore rather than a validation failure.
+      // rows to restore rather than a validation failure.
       if (backup.protectedAccounts) {
         await db.protectedAccounts.bulkAdd(backup.protectedAccounts);
+      }
+      if (backup.exclusionRules) {
+        await db.exclusionRules.bulkAdd(backup.exclusionRules);
+      }
+      if (backup.feedbackReports) {
+        await db.feedbackReports.bulkAdd(backup.feedbackReports);
       }
     }
   );

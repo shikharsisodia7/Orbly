@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Check, Download, ExternalLink, FileSpreadsheet, History, ListChecks, Shield, ShieldOff, UploadCloud, UserCheck, UserMinus, UserPlus, UserX, Users, X } from "lucide-react";
+import { Ban, Check, Download, ExternalLink, FileSpreadsheet, History, ListChecks, Shield, ShieldOff, UploadCloud, UserCheck, UserMinus, UserPlus, UserX, Users, X } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { AnimatedCounter } from "@/components/motion/AnimatedCounter";
 import { ValidityBadge } from "@/components/ui/ValidityBadge";
@@ -475,6 +475,99 @@ function ProtectedAccountsCard({ output }: { output: ProtectedAccountsOutput }) 
   );
 }
 
+interface ExclusionRuleOutput {
+  pattern: string;
+  matchMode: "contains" | "startsWith" | "endsWith";
+  note: string | null;
+  createdAt: string;
+}
+
+const MATCH_MODE_LABEL: Record<ExclusionRuleOutput["matchMode"], string> = {
+  contains: "contains",
+  startsWith: "starts with",
+  endsWith: "ends with",
+};
+
+interface AddExclusionRuleOutput {
+  available: true;
+  rule: ExclusionRuleOutput;
+}
+
+function AddExclusionRuleCard({ output }: { output: AddExclusionRuleOutput }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-border bg-white px-4 py-3.5 text-sm text-ink-soft">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-rose-soft text-rose">
+        <Ban size={14} />
+      </div>
+      <span>
+        Usernames that {MATCH_MODE_LABEL[output.rule.matchMode]} &quot;{output.rule.pattern}&quot; are now permanently
+        excluded from unfollow suggestions{output.rule.note ? ` — ${output.rule.note}` : ""}. This has no override —
+        they&apos;ll never be suggested, even if asked to include protected accounts.
+      </span>
+    </div>
+  );
+}
+
+interface RemoveExclusionRuleOutput {
+  available: true;
+  pattern: string;
+  wasRemoved: boolean;
+}
+
+function RemoveExclusionRuleCard({ output }: { output: RemoveExclusionRuleOutput }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-border bg-white px-4 py-3.5 text-sm text-ink-soft">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-ink-faint">
+        <ShieldOff size={14} />
+      </div>
+      {output.wasRemoved
+        ? `The exclusion rule for "${output.pattern}" was removed — matching accounts can show up in suggestions again.`
+        : `No exclusion rule matched "${output.pattern}" exactly, so there was nothing to remove.`}
+    </div>
+  );
+}
+
+interface ListExclusionRulesOutput {
+  available: true;
+  total: number;
+  rules: ExclusionRuleOutput[];
+}
+
+function ListExclusionRulesCard({ output }: { output: ListExclusionRulesOutput }) {
+  if (output.rules.length === 0) {
+    return (
+      <div className="rounded-2xl border border-border bg-white px-4 py-6 text-center text-sm text-ink-soft">
+        No exclusion rules set yet.
+      </div>
+    );
+  }
+  return (
+    <div className="w-full max-w-sm space-y-2 rounded-2xl border border-border bg-white p-3">
+      <div className="flex items-center gap-1.5 px-1 text-xs font-medium text-rose">
+        <Ban size={13} />
+        <AnimatedCounter value={output.total} /> exclusion rule{output.total === 1 ? "" : "s"}
+      </div>
+      <div className="space-y-1">
+        {output.rules.map((r, i) => (
+          <motion.div
+            key={r.pattern}
+            custom={i}
+            variants={staggerItem}
+            initial="hidden"
+            animate="show"
+            className="rounded-lg px-2 py-1.5"
+          >
+            <p className="text-sm text-ink">
+              {MATCH_MODE_LABEL[r.matchMode]} &quot;{r.pattern}&quot;
+            </p>
+            {r.note && <p className="text-[11px] text-ink-faint">{r.note}</p>}
+          </motion.div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ToolResultCard({ toolName, output }: { toolName: string; output: unknown }) {
   if (isUnavailable(output)) return <UnavailableCard />;
   if (!output || typeof output !== "object") return null;
@@ -505,6 +598,12 @@ export function ToolResultCard({ toolName, output }: { toolName: string; output:
       return <UnprotectAccountCard output={output as UnprotectAccountOutput} />;
     case "listProtectedAccounts":
       return <ProtectedAccountsCard output={output as ProtectedAccountsOutput} />;
+    case "addExclusionRule":
+      return <AddExclusionRuleCard output={output as AddExclusionRuleOutput} />;
+    case "removeExclusionRule":
+      return <RemoveExclusionRuleCard output={output as RemoveExclusionRuleOutput} />;
+    case "listExclusionRules":
+      return <ListExclusionRulesCard output={output as ListExclusionRulesOutput} />;
     default:
       return null;
   }

@@ -70,6 +70,24 @@ export const backupProtectedAccountSchema = z.object({
   dateAdded: z.string(),
 });
 
+export const backupExclusionRuleSchema = z.object({
+  id: z.string(),
+  pattern: z.string(),
+  rawPattern: z.string(),
+  matchMode: z.enum(["contains", "startsWith", "endsWith"]),
+  note: z.string().nullable(),
+  createdAt: z.string(),
+});
+
+export const backupFeedbackReportSchema = z.object({
+  id: z.string(),
+  message: z.string(),
+  category: z.enum(["stale-data", "not-saving", "wrong-count", "ui-issue", "feature-request", "other"]),
+  status: z.enum(["new", "auto-resolved", "reviewed"]),
+  pageContext: z.string().nullable(),
+  createdAt: z.string(),
+});
+
 export const backupFileSchema = z.object({
   schemaVersion: z.number(),
   exportedAt: z.string(),
@@ -78,11 +96,16 @@ export const backupFileSchema = z.object({
   snapshotFollowing: z.array(backupRelationshipSchema),
   queueItems: z.array(backupQueueItemSchema),
   settings: backupSettingsSchema.nullable(),
-  // Optional so backups made before protected accounts existed still restore
-  // cleanly — absent (not empty-array-vs-missing-distinction) means "this
-  // backup predates the feature," restored as no protected accounts rather
-  // than failing validation.
+  // Every field below is optional so a backup made before that feature
+  // existed still restores cleanly — absent (not an empty-array vs. missing
+  // distinction) means "this backup predates the feature," restored as
+  // none of that data rather than failing validation. This was a real bug
+  // once already (protectedAccounts was silently dropped by backup/restore
+  // for a while) — new tables must be added here the moment they're added
+  // to the schema, not as an afterthought.
   protectedAccounts: z.array(backupProtectedAccountSchema).optional(),
+  exclusionRules: z.array(backupExclusionRuleSchema).optional(),
+  feedbackReports: z.array(backupFeedbackReportSchema).optional(),
 });
 
 export type BackupFile = z.infer<typeof backupFileSchema>;
