@@ -61,6 +61,15 @@ export const backupSettingsSchema = z.object({
   reducedMotionOverride: z.enum(["system", "reduced", "full"]),
 });
 
+export const backupProtectedAccountSchema = z.object({
+  id: z.string(),
+  normalizedUsername: z.string(),
+  displayUsername: z.string(),
+  profileUrl: z.string(),
+  label: z.string().nullable(),
+  dateAdded: z.string(),
+});
+
 export const backupFileSchema = z.object({
   schemaVersion: z.number(),
   exportedAt: z.string(),
@@ -69,6 +78,11 @@ export const backupFileSchema = z.object({
   snapshotFollowing: z.array(backupRelationshipSchema),
   queueItems: z.array(backupQueueItemSchema),
   settings: backupSettingsSchema.nullable(),
+  // Optional so backups made before protected accounts existed still restore
+  // cleanly — absent (not empty-array-vs-missing-distinction) means "this
+  // backup predates the feature," restored as no protected accounts rather
+  // than failing validation.
+  protectedAccounts: z.array(backupProtectedAccountSchema).optional(),
 });
 
 export type BackupFile = z.infer<typeof backupFileSchema>;

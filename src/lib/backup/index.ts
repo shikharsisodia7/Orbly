@@ -5,13 +5,14 @@ import { backupFileSchema, type BackupFile } from "./schema";
 
 export async function buildBackup(): Promise<BackupFile> {
   const db = getDb();
-  const [snapshots, snapshotFollowers, snapshotFollowing, queueItems, settings] =
+  const [snapshots, snapshotFollowers, snapshotFollowing, queueItems, settings, protectedAccounts] =
     await Promise.all([
       db.snapshots.toArray(),
       db.snapshotFollowers.toArray(),
       db.snapshotFollowing.toArray(),
       db.queueItems.toArray(),
       db.settings.get("app"),
+      db.protectedAccounts.toArray(),
     ]);
 
   return {
@@ -22,6 +23,7 @@ export async function buildBackup(): Promise<BackupFile> {
     snapshotFollowing,
     queueItems,
     settings: settings ?? null,
+    protectedAccounts,
   };
 }
 
@@ -62,17 +64,14 @@ export async function restoreBackup(backup: BackupFile): Promise<void> {
   const db = getDb();
   await db.transaction(
     "rw",
-    db.snapshots,
-    db.snapshotFollowers,
-    db.snapshotFollowing,
-    db.queueItems,
-    db.settings,
+    [db.snapshots, db.snapshotFollowers, db.snapshotFollowing, db.queueItems, db.settings, db.protectedAccounts],
     async () => {
       await db.snapshots.clear();
       await db.snapshotFollowers.clear();
       await db.snapshotFollowing.clear();
       await db.queueItems.clear();
       await db.settings.clear();
+      await db.protectedAccounts.clear();
 
       await db.snapshots.bulkAdd(backup.snapshots.map(normalizeSnapshotRecord));
       await db.snapshotFollowers.bulkAdd(backup.snapshotFollowers);
@@ -80,6 +79,12 @@ export async function restoreBackup(backup: BackupFile): Promise<void> {
       await db.queueItems.bulkAdd(backup.queueItems);
       if (backup.settings) {
         await db.settings.put(backup.settings);
+      }
+      // Optional: absent entirely on a backup made before protected accounts
+      // existed, so this must not throw on old files — treated as zero
+      // protected accounts to restore rather than a validation failure.
+      if (backup.protectedAccounts) {
+        await db.protectedAccounts.bulkAdd(backup.protectedAccounts);
       }
     }
   );

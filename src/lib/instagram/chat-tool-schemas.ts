@@ -7,11 +7,22 @@ import { z } from "zod";
  * browser-only and reads from IndexedDB.
  */
 
+export const matchModeSchema = z
+  .enum(["contains", "startsWith", "endsWith"])
+  .optional()
+  .describe(
+    "How `query` should match a username, case-insensitive. 'contains' (the default) matches the text anywhere in the username — use it for phrasing like \"usernames with a 3 in them\" or \"containing xyz\". 'startsWith' is REQUIRED for phrasing like \"usernames starting with a\" or \"that begin with the letter j\" — never use 'contains' for a starts-with request, since that would also match the letter appearing in the middle of a name. 'endsWith' is REQUIRED for phrasing like \"usernames ending in x\" or \"that end with 99\". Get this right: a strict starts-with/ends-with request must use the matching mode, not a plain substring search."
+  );
+export type MatchMode = z.infer<typeof matchModeSchema>;
+
 export const paginatedListInputSchema = z.object({
   query: z
     .string()
     .optional()
-    .describe("Optional substring to filter usernames by, case-insensitive."),
+    .describe(
+      "Optional text to filter usernames by, case-insensitive. Pair with matchMode to control exactly how it matches (contains/startsWith/endsWith) — see matchMode's description for when each is required."
+    ),
+  matchMode: matchModeSchema,
   offset: z.number().int().min(0).optional().describe("How many matching results to skip. Defaults to 0."),
   after: z
     .string()
@@ -112,11 +123,11 @@ export const CHAT_TOOL_DESCRIPTIONS = {
   getAccountStats:
     "Get the current follower count, following count, mutuals count, doesn't-follow-back count, and you-don't-follow-back count from the user's latest imported Instagram snapshot.",
   listDoesNotFollowBack:
-    "List accounts the user follows that don't follow them back (Following minus Followers), optionally filtered by a username substring, paginated. Accounts the user has marked protected are excluded by default — pass includeProtected: true only if the user explicitly asks to see protected accounts too.",
+    "List accounts the user follows that don't follow them back (Following minus Followers), optionally filtered by username using query + matchMode (see matchMode for choosing contains vs startsWith vs endsWith correctly), paginated. Accounts the user has marked protected are excluded by default — pass includeProtected: true only if the user explicitly asks to see protected accounts too.",
   listMutuals:
-    "List accounts that follow the user AND that the user follows back, optionally filtered by a username substring, paginated.",
+    "List accounts that follow the user AND that the user follows back, optionally filtered by username using query + matchMode (see matchMode for choosing contains vs startsWith vs endsWith correctly), paginated.",
   listYouDontFollowBack:
-    "List accounts that follow the user but the user doesn't follow back (Followers minus Following), optionally filtered by a username substring, paginated.",
+    "List accounts that follow the user but the user doesn't follow back (Followers minus Following), optionally filtered by username using query + matchMode (see matchMode for choosing contains vs startsWith vs endsWith correctly), paginated.",
   checkAccount:
     "Check whether a specific username follows the user and/or the user follows that username, based on the latest snapshot. Also returns the Unix timestamp Meta recorded for each direction of the relationship (when available) — i.e. roughly when that follow happened — as followsYouSinceTimestamp / youFollowSinceTimestamp. Null when Meta didn't record one; never estimate or invent a date if it's null.",
   listRecentUnfollowers:

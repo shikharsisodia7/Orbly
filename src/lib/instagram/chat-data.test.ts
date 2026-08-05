@@ -125,6 +125,83 @@ describe("searchAndPaginate", () => {
     expect(result.hasMore).toBe(false);
   });
 
+  /**
+   * Regression coverage for issue #1: query + matchMode must be strict and
+   * deterministic, never a loose/fuzzy match. "Starts with a" must never
+   * include a username with an "a" in the middle (e.g. "banana"), and
+   * "contains 3" must never miss a username with a 3 anywhere but the
+   * start/end. Each mode maps to exactly one JS string method (see
+   * matchesQuery in chat-data.ts) — these tests exercise the boundary cases
+   * a loose substring-only implementation would get wrong.
+   */
+  describe("matchMode strictness", () => {
+    const varied = [
+      "alice",
+      "banana",
+      "cabbage",
+      "delta3",
+      "3elephant",
+      "fig3ish",
+      "grape",
+      "avocado",
+      "za3",
+      "zebra",
+    ].map(rel);
+
+    it("startsWith only returns usernames that literally start with the letter", () => {
+      const result = searchAndPaginate(varied, { query: "a", matchMode: "startsWith" });
+      const names = result.items.map((i) => i.username).sort();
+      expect(names).toEqual(["alice", "avocado"]);
+      expect(names).not.toContain("banana");
+      expect(names).not.toContain("cabbage");
+      expect(names).not.toContain("grape");
+      expect(names).not.toContain("zebra");
+    });
+
+    it("startsWith with a different letter returns only that letter's prefix matches", () => {
+      const result = searchAndPaginate(varied, { query: "z", matchMode: "startsWith" });
+      expect(result.items.map((i) => i.username).sort()).toEqual(["za3", "zebra"]);
+    });
+
+    it("contains (explicit) returns every username with the number 3 anywhere", () => {
+      const result = searchAndPaginate(varied, { query: "3", matchMode: "contains" });
+      const names = result.items.map((i) => i.username).sort();
+      expect(names).toEqual(["3elephant", "delta3", "fig3ish", "za3"]);
+      expect(names).not.toContain("alice");
+    });
+
+    it("contains is the default when matchMode is omitted", () => {
+      const withDefault = searchAndPaginate(varied, { query: "3" });
+      const explicit = searchAndPaginate(varied, { query: "3", matchMode: "contains" });
+      expect(withDefault.items.map((i) => i.username).sort()).toEqual(
+        explicit.items.map((i) => i.username).sort()
+      );
+    });
+
+    it("endsWith only returns usernames that literally end with the query", () => {
+      const result = searchAndPaginate(varied, { query: "3", matchMode: "endsWith" });
+      const names = result.items.map((i) => i.username).sort();
+      expect(names).toEqual(["delta3", "za3"]);
+      expect(names).not.toContain("3elephant");
+      expect(names).not.toContain("fig3ish");
+    });
+
+    it("is case-insensitive and strips a leading @ from the query", () => {
+      const result = searchAndPaginate(varied, { query: "@A", matchMode: "startsWith" });
+      expect(result.items.map((i) => i.username).sort()).toEqual(["alice", "avocado"]);
+    });
+
+    it("startsWith does not match a query that only appears mid-string", () => {
+      const result = searchAndPaginate(varied, { query: "bbage", matchMode: "startsWith" });
+      expect(result.items).toHaveLength(0);
+    });
+
+    it("endsWith does not match a query that only appears at the start", () => {
+      const result = searchAndPaginate(varied, { query: "delta", matchMode: "endsWith" });
+      expect(result.items).toHaveLength(0);
+    });
+  });
+
   describe("after cursor", () => {
     it("returns the item immediately following the cursor", () => {
       const small = [rel("alice"), rel("bob"), rel("charlie"), rel("dave")];

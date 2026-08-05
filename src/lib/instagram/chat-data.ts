@@ -1,6 +1,6 @@
 import type { Relationship } from "./types";
 import { computeCurrentRelationships } from "./comparisons";
-import type { CSVListType } from "./chat-tool-schemas";
+import type { CSVListType, MatchMode } from "./chat-tool-schemas";
 
 /**
  * Pure, framework-agnostic helpers the AI chat feature uses to turn a
@@ -23,8 +23,28 @@ function toItem(rel: Relationship) {
 }
 
 /**
- * Filters by a case-insensitive substring match on the username, then
- * paginates either by numeric offset or by an `after` cursor.
+ * Strictly and deterministically matches a normalized username against a
+ * query under the given mode. Each mode maps to exactly one JS string
+ * method — no fuzzy/loose fallback — so "starts with a" can never
+ * accidentally match a username with an "a" in the middle, and "contains 3"
+ * can never accidentally require it at a specific position.
+ */
+function matchesQuery(normalizedUsername: string, query: string, mode: MatchMode): boolean {
+  switch (mode) {
+    case "startsWith":
+      return normalizedUsername.startsWith(query);
+    case "endsWith":
+      return normalizedUsername.endsWith(query);
+    case "contains":
+    default:
+      return normalizedUsername.includes(query);
+  }
+}
+
+/**
+ * Filters by a case-insensitive match on the username — contains (default),
+ * startsWith, or endsWith, per `matchMode` — then paginates either by
+ * numeric offset or by an `after` cursor.
  *
  * `after` (a normalizedUsername) is the stable option: it means "the next
  * items alphabetically past this username," which stays correct even if
@@ -36,13 +56,14 @@ function toItem(rel: Relationship) {
  */
 export function searchAndPaginate(
   list: Relationship[],
-  options: { query?: string; offset?: number; after?: string; limit?: number } = {}
+  options: { query?: string; matchMode?: MatchMode; offset?: number; after?: string; limit?: number } = {}
 ): PaginatedResult {
-  const { query, offset = 0, after, limit = DEFAULT_LIMIT } = options;
+  const { query, matchMode = "contains", offset = 0, after, limit = DEFAULT_LIMIT } = options;
   const boundedLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
 
-  const filtered = query
-    ? list.filter((r) => r.normalizedUsername.includes(query.trim().toLowerCase().replace(/^@+/, "")))
+  const normalizedQuery = query?.trim().toLowerCase().replace(/^@+/, "");
+  const filtered = normalizedQuery
+    ? list.filter((r) => matchesQuery(r.normalizedUsername, normalizedQuery, matchMode))
     : list;
 
   const sorted = [...filtered].sort((a, b) => a.normalizedUsername.localeCompare(b.normalizedUsername));
