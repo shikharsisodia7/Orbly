@@ -1,5 +1,5 @@
 import { deriveLegacyValidity } from "@/lib/instagram/validity";
-import type { SnapshotRecord } from "./schema";
+import type { ExclusionRuleRecord, SnapshotRecord } from "./schema";
 
 type PartiallyValidatedSnapshot = Omit<
   SnapshotRecord,
@@ -41,4 +41,16 @@ export function normalizeSnapshotRecord(raw: PartiallyValidatedSnapshot): Snapsh
     validityReasons: raw.validityReasons ?? derived.reasons,
     profileReferenceCounts: raw.profileReferenceCounts ?? null,
   };
+}
+
+/**
+ * Backfills `field` onto an exclusion rule record created before bio-based
+ * rules existed. Every rule from that era was a username rule — that was the
+ * only kind that could exist — so this is a safe, unambiguous default rather
+ * than a guess.
+ */
+export function normalizeExclusionRuleRecord(
+  raw: Omit<ExclusionRuleRecord, "field"> & Partial<Pick<ExclusionRuleRecord, "field">>
+): ExclusionRuleRecord {
+  return { ...raw, field: raw.field ?? "username" };
 }

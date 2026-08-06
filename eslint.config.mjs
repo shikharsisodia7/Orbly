@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Not part of the Next.js app: a separate, vanilla-JS browser extension
+    // (its own popup.html confuses eslint-config-next's pages-dir detection)
+    // and a one-off Node script — neither should be linted with Next rules.
+    "extension/**",
+    "scripts/**",
   ]),
 ]);
 

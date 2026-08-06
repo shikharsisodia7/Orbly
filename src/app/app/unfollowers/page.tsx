@@ -14,6 +14,8 @@ import { useLostFollowerEvents } from "@/hooks/useLostFollowerEvents";
 import { useQueueUsernames } from "@/hooks/useQueueUsernames";
 import { useProtectedUsernames } from "@/hooks/useProtectedUsernames";
 import { useExclusionRules } from "@/hooks/useExclusionRules";
+import { useNotFoundUsernames } from "@/hooks/useAccountStatusCache";
+import { useCachedBios } from "@/hooks/useAccountBioCache";
 import { matchesAnyExclusionRule } from "@/lib/instagram/exclusion-rules";
 import { addManyToQueue } from "@/lib/db/queries";
 import { formatDateRange } from "@/lib/utils/format";
@@ -29,6 +31,8 @@ export default function UnfollowersPage() {
   const queuedUsernames = useQueueUsernames();
   const protectedUsernames = useProtectedUsernames();
   const exclusionRules = useExclusionRules();
+  const notFoundUsernames = useNotFoundUsernames();
+  const bios = useCachedBios();
   const [period, setPeriod] = useState<PeriodFilter>("all");
   const [followingFilter, setFollowingFilter] = useState<FollowingFilter>("all");
   const [addedUsernames, setAddedUsernames] = useState<Set<string>>(new Set());
@@ -37,7 +41,10 @@ export default function UnfollowersPage() {
   const filtered = useMemo(() => {
     if (!events) return [];
     let list = events.filter(
-      (e) => !protectedUsernames.has(e.normalizedUsername) && !matchesAnyExclusionRule(e.normalizedUsername, exclusionRules)
+      (e) =>
+        !protectedUsernames.has(e.normalizedUsername) &&
+        !notFoundUsernames.has(e.normalizedUsername) &&
+        !matchesAnyExclusionRule({ normalizedUsername: e.normalizedUsername, bio: bios.get(e.normalizedUsername) }, exclusionRules)
     );
 
     if (period === "latest" && snapshots && snapshots.length >= 2) {
@@ -52,7 +59,7 @@ export default function UnfollowersPage() {
     if (followingFilter === "not") list = list.filter((e) => !e.stillFollowingThem);
 
     return list;
-  }, [events, period, followingFilter, snapshots, now, protectedUsernames, exclusionRules]);
+  }, [events, period, followingFilter, snapshots, now, protectedUsernames, notFoundUsernames, bios, exclusionRules]);
 
   async function handleAddOne(event: (typeof filtered)[number]) {
     await addManyToQueue([

@@ -1,15 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   addManyToQueue,
+  cacheAccountBio,
   createSnapshot,
   deleteAllData,
   getQueueItems,
   markAccountUnfollowed,
   protectAccount as dbProtectAccount,
+  setAccountStatus,
   updateQueueItemStatus,
 } from "@/lib/db/queries";
 import {
   addExclusionRule,
+  checkAccount,
   exportListAsCSV,
   getAccountStats,
   listDoesNotFollowBack,
@@ -579,5 +582,176 @@ describe("exclusion rules — persistent pattern-based blocking", () => {
     const result = await listDoesNotFollowBack({});
     if (!result.available) throw new Error("expected data to be available");
     expect(result.result.items.map((i) => i.username)).toEqual(["official_nba"]);
+  });
+});
+
+describe("bio-based exclusion rules (extension-captured, one account at a time)", () => {
+  it("checkAccount returns null bio/liveStatus for an account never looked up via the extension", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob")],
+      datasetHash: "bio-1",
+      originalFileName: null,
+    });
+    const result = await checkAccount({ username: "bob" });
+    if (!result.available) throw new Error("expected data to be available");
+    expect(result.bio).toBeNull();
+    expect(result.liveStatus).toBeNull();
+  });
+
+  it("checkAccount surfaces a bio previously captured for that account", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob")],
+      datasetHash: "bio-2",
+      originalFileName: null,
+    });
+    await cacheAccountBio("bob", "Member of the S C U crew");
+    const result = await checkAccount({ username: "@Bob" });
+    if (!result.available) throw new Error("expected data to be available");
+    expect(result.bio).toBe("Member of the S C U crew");
+  });
+
+  it("a bio exclusion rule hides the specific account it was captured for from doesNotFollowBack", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob"), rel("charlie")],
+      datasetHash: "bio-3",
+      originalFileName: null,
+    });
+    await cacheAccountBio("bob", "Member of the S C U crew");
+
+    await addExclusionRule({ pattern: "s c u", field: "bio" });
+
+    const result = await listDoesNotFollowBack({});
+    if (!result.available) throw new Error("expected data to be available");
+    expect(result.result.items.map((i) => i.username)).toEqual(["charlie"]);
+  });
+
+  it("a bio rule never hides an account whose bio was never captured, even if the username matches the bio pattern text", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("scu_fanpage")],
+      datasetHash: "bio-4",
+      originalFileName: null,
+    });
+    // "scu_fanpage" contains "scu" in the USERNAME, but the rule below is
+    // scoped to bio, and this account's bio was never looked up — must not match.
+    await addExclusionRule({ pattern: "scu", field: "bio" });
+
+    const result = await listDoesNotFollowBack({});
+    if (!result.available) throw new Error("expected data to be available");
+    expect(result.result.items.map((i) => i.username)).toEqual(["scu_fanpage"]);
+  });
+
+  it("username and bio exclusion rules stack correctly across a mixed list", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("nba_fan"), rel("dave"), rel("erin"), rel("frank")],
+      datasetHash: "bio-5",
+      originalFileName: null,
+    });
+    await cacheAccountBio("dave", "into crypto and hiking");
+    await cacheAccountBio("erin", "just a gardener");
+
+    await addExclusionRule({ pattern: "nba", field: "username" });
+    await addExclusionRule({ pattern: "crypto", field: "bio" });
+
+    const result = await listDoesNotFollowBack({});
+    if (!result.available) throw new Error("expected data to be available");
+    // nba_fan excluded by username rule, dave excluded by bio rule;
+    // erin (bio captured, doesn't match) and frank (no bio captured) remain.
+    expect(result.result.items.map((i) => i.username).sort()).toEqual(["erin", "frank"]);
+  });
+
+  it("removeExclusionRule with field: bio only removes the bio rule, leaving a same-text username rule intact", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("nba_fan")],
+      datasetHash: "bio-6",
+      originalFileName: null,
+    });
+    await cacheAccountBio("nba_fan", "all things nba");
+    await addExclusionRule({ pattern: "nba", field: "username" });
+    await addExclusionRule({ pattern: "nba", field: "bio" });
+
+    const rules = await listExclusionRules();
+    expect(rules.total).toBe(2);
+
+    const removal = await removeExclusionRule({ pattern: "nba", field: "bio" });
+    expect(removal.wasRemoved).toBe(true);
+
+    const afterRemoval = await listExclusionRules();
+    expect(afterRemoval.total).toBe(1);
+    expect(afterRemoval.rules[0].field).toBe("username");
+
+    // Still excluded — the username rule alone is enough.
+    const result = await listDoesNotFollowBack({});
+    if (!result.available) throw new Error("expected data to be available");
+    expect(result.result.items).toHaveLength(0);
+  });
+});
+
+describe("account live-status (banned/deactivated/deleted, checked at lookup time)", () => {
+  it("excludes an account confirmed 'not_found' from doesNotFollowBack", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob"), rel("charlie")],
+      datasetHash: "status-1",
+      originalFileName: null,
+    });
+    await setAccountStatus("bob", "not_found");
+
+    const result = await listDoesNotFollowBack({});
+    if (!result.available) throw new Error("expected data to be available");
+    expect(result.result.items.map((i) => i.username)).toEqual(["charlie"]);
+  });
+
+  it("does NOT exclude a 'private' account — private is informational, not gone", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob")],
+      datasetHash: "status-2",
+      originalFileName: null,
+    });
+    await setAccountStatus("bob", "private");
+
+    const result = await listDoesNotFollowBack({});
+    if (!result.available) throw new Error("expected data to be available");
+    expect(result.result.items.map((i) => i.username)).toEqual(["bob"]);
+  });
+
+  it("excludes a not_found account from getAccountStats' outstanding count and CSV export too", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob"), rel("charlie")],
+      datasetHash: "status-3",
+      originalFileName: null,
+    });
+    await setAccountStatus("bob", "not_found");
+
+    const stats = await getAccountStats();
+    if (!stats.available) throw new Error("expected data to be available");
+    expect(stats.doesNotFollowBackCount).toBe(1);
+
+    const csv = await exportListAsCSV({ listType: "notFollowingBack" });
+    if (!csv.available) throw new Error("expected data to be available");
+    expect(csv.csv).not.toContain("bob");
+    expect(csv.csv).toContain("charlie");
+  });
+
+  it("checkAccount surfaces the captured live status and when it was checked", async () => {
+    await createSnapshot({
+      followers: [rel("alice")],
+      following: [rel("alice"), rel("bob")],
+      datasetHash: "status-4",
+      originalFileName: null,
+    });
+    await setAccountStatus("bob", "not_found");
+
+    const result = await checkAccount({ username: "bob" });
+    if (!result.available) throw new Error("expected data to be available");
+    expect(result.liveStatus).toBe("not_found");
+    expect(result.liveStatusCheckedAt).not.toBeNull();
   });
 });

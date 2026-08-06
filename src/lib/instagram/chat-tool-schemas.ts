@@ -82,16 +82,24 @@ export const unprotectAccountInputSchema = z.object({
 });
 export type UnprotectAccountInput = z.infer<typeof unprotectAccountInputSchema>;
 
+export const exclusionFieldSchema = z
+  .enum(["username", "bio"])
+  .optional()
+  .describe(
+    "Which field the pattern is matched against. 'username' (the default) matches every account, present now or in any future re-import, since username is always known. 'bio' can ONLY be evaluated for an account whose bio Orbly has actually captured — via the browser extension's one-account-at-a-time lookup while the user was viewing that profile themselves; Orbly never bulk-fetches bios across a whole follower/following list. Use 'bio' only right after checkAccount returned a non-null `bio` for that account, so the rule has something real to match against — never invent bio content or claim a bio rule works against accounts nobody has looked up."
+  );
+
 export const addExclusionRuleInputSchema = z.object({
   pattern: z
     .string()
     .trim()
     .min(1)
-    .max(60)
+    .max(120)
     .describe(
-      "The text to match against usernames — a word, name fragment, or short string, e.g. \"nba\" or \"official\". This is matched ONLY against username text; Instagram's export has no bio field, so a pattern can never actually match bio content no matter how the request was phrased."
+      "The text to match — a word or phrase. For a username rule: a name fragment, e.g. \"nba\" or \"official\". For a bio rule: a word or phrase to look for in that account's captured bio text, e.g. \"S C U\"."
     ),
   matchMode: matchModeSchema,
+  field: exclusionFieldSchema,
   note: z
     .string()
     .trim()
@@ -104,6 +112,7 @@ export type AddExclusionRuleInput = z.infer<typeof addExclusionRuleInputSchema>;
 
 export const removeExclusionRuleInputSchema = z.object({
   pattern: z.string().describe("The exact pattern text of the rule to remove, as it was originally added."),
+  field: exclusionFieldSchema,
 });
 export type RemoveExclusionRuleInput = z.infer<typeof removeExclusionRuleInputSchema>;
 
@@ -154,7 +163,7 @@ export const CHAT_TOOL_DESCRIPTIONS = {
   listYouDontFollowBack:
     "List accounts that follow the user but the user doesn't follow back (Followers minus Following), optionally filtered by username using query + matchMode (see matchMode for choosing contains vs startsWith vs endsWith correctly), paginated.",
   checkAccount:
-    "Check whether a specific username follows the user and/or the user follows that username, based on the latest snapshot. Also returns the Unix timestamp Meta recorded for each direction of the relationship (when available) — i.e. roughly when that follow happened — as followsYouSinceTimestamp / youFollowSinceTimestamp. Null when Meta didn't record one; never estimate or invent a date if it's null.",
+    "Check whether a specific username follows the user and/or the user follows that username, based on the latest snapshot. Also returns the Unix timestamp Meta recorded for each direction of the relationship (when available) — i.e. roughly when that follow happened — as followsYouSinceTimestamp / youFollowSinceTimestamp. Null when Meta didn't record one; never estimate or invent a date if it's null. Also returns `bio` and `liveStatus` if (and only if) the user has previously looked this account up via the browser extension while viewing its actual profile — both are null otherwise. Never claim to know a bio or live status Orbly hasn't actually captured; if they're null and the user wants them, tell them to open the account's profile on Instagram, then use the Orbly extension's 'Look up this account' action.",
   listRecentUnfollowers:
     "List people who used to follow the user but no longer do, detected by comparing consecutive imported snapshots over time. Requires at least two usable snapshots — if there's only one, this returns an explanation instead of data. Accounts the user has marked protected are excluded by default — pass includeProtected: true only if the user explicitly asks to see protected accounts too.",
   listSnapshots:
@@ -170,9 +179,9 @@ export const CHAT_TOOL_DESCRIPTIONS = {
   listProtectedAccounts:
     "List every account the user has marked protected, with its label (if any) and the date it was protected. Call this when the user asks things like \"who have I protected\" or \"show me my protected accounts.\"",
   addExclusionRule:
-    "Add a persistent, pattern-based exclusion rule that hides every username matching it — now AND in every future re-import — from doesNotFollowBack, recent-unfollower results, the unfollow queue's suggestions, and CSV exports, with NO override (unlike protected accounts, there is no 'show me anyway' for an exclusion rule). Use this instead of protectAccount when the user describes a CATEGORY or pattern rather than one specific username — e.g. \"don't ever suggest unfollowing anything with nba in the name\" or \"never touch accounts ending in _official\", or \"keep everyone with fitness in their username regardless of whether they follow back.\" Pick matchMode from the same rules as query filtering (contains/startsWith/endsWith). IMPORTANT: this can only ever match on USERNAME TEXT — Instagram's export has no bio field, so if the user asks to exclude by bio content (e.g. \"anyone whose bio mentions crypto\"), do not call this tool and claim it worked; tell them plainly that Orbly has no bio data and ask if a username-based rule would help instead.",
+    "Add a persistent, pattern-based exclusion rule that hides every matching account — now AND in every future re-import — from doesNotFollowBack, recent-unfollower results, the unfollow queue's suggestions, and CSV exports, with NO override (unlike protected accounts, there is no 'show me anyway' for an exclusion rule). Multiple rules stack: an account matching ANY rule (username or bio) is excluded. Two kinds: (1) field: 'username' (the default) — use for a CATEGORY or pattern in the name itself, e.g. \"don't ever suggest unfollowing anything with nba in the name\" or \"never touch accounts ending in _official\" — this generalizes to every account, present or future, since username is always known. (2) field: 'bio' — use ONLY right after checkAccount returned a real, non-null bio for a specific account the user looked up, e.g. \"exclude anyone whose bio has S C U in it\" said right after checking @someaccount and seeing 'S C U' in their bio. A bio rule can only ever match accounts whose bio Orbly has actually captured this way — it does NOT retroactively scan every account's bio, because Orbly never bulk-fetches bios (that would mean automated requests to every profile). If the user asks for a bio-based exclusion for an account nobody has looked up yet, tell them to open that account's Instagram profile and use the Orbly extension's 'Look up this account' action first, then ask again.",
   removeExclusionRule:
-    "Remove a previously added exclusion rule by its exact pattern text, making matching accounts eligible again for unfollow suggestions. Call this when the user says something like \"remove that nba exclusion rule\" or \"stop excluding accounts with fitness in the name.\"",
+    "Remove a previously added exclusion rule by its exact pattern text and field, making matching accounts eligible again for unfollow suggestions. Call this when the user says something like \"remove that nba exclusion rule\" or \"stop excluding accounts with fitness in the name\" or \"remove the S C U bio exclusion.\"",
   listExclusionRules:
-    "List every active exclusion rule (pattern, match mode, and note if any). Call this when the user asks things like \"what exclusion rules do I have\" or \"what am I keeping regardless of follow-back status.\"",
+    "List every active exclusion rule (pattern, field, match mode, and note if any). Call this when the user asks things like \"what exclusion rules do I have\" or \"what am I keeping regardless of follow-back status.\"",
 } as const;

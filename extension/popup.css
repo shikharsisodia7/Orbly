@@ -1,0 +1,239 @@
+:root {
+  --color-ink: #0e0e10;
+  --color-ink-soft: #55555f;
+  --color-ink-faint: #8b8b93;
+  --color-paper: #ffffff;
+  --color-surface: #f3f2ef;
+  --color-surface-hover: #ebe9e5;
+  --color-border: #e6e4e0;
+  --color-border-strong: #d6d3ce;
+
+  --color-rose: #ee4f57;
+  --color-rose-soft: #fdeceb;
+  --color-violet: #6c5ce7;
+  --color-violet-soft: #f0eefd;
+  --color-blue: #3b82f6;
+  --color-blue-soft: #eaf2fe;
+  --color-orange: #e8930a;
+  --color-orange-soft: #fdf1e0;
+  --color-green: #1f9d55;
+  --color-green-soft: #e9f8ef;
+
+  --gradient-instagram: linear-gradient(135deg, #4f5bd5 0%, #962fbf 28%, #d62976 52%, #fa7e1e 76%, #feda75 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  width: 340px;
+  font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  color: var(--color-ink);
+  background: var(--color-paper);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.logo {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--gradient-instagram);
+  flex-shrink: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.subtitle {
+  margin: 1px 0 0;
+  font-size: 11px;
+  color: var(--color-ink-faint);
+}
+
+.content {
+  padding: 14px 16px;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.loading {
+  font-size: 12px;
+  color: var(--color-ink-faint);
+  text-align: center;
+  padding: 24px 0;
+}
+
+.card {
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 12px;
+  background: var(--color-paper);
+}
+
+.card + .card {
+  margin-top: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.hint {
+  font-size: 11px;
+  color: var(--color-ink-soft);
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-green {
+  background: var(--color-green-soft);
+  color: var(--color-green);
+}
+.badge-neutral {
+  background: var(--color-surface);
+  color: var(--color-ink-soft);
+}
+.badge-rose {
+  background: var(--color-rose-soft);
+  color: var(--color-rose);
+}
+.badge-blue {
+  background: var(--color-blue-soft);
+  color: var(--color-blue);
+}
+
+button.btn {
+  appearance: none;
+  border: none;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 9px 12px;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  width: 100%;
+}
+button.btn:active {
+  transform: scale(0.98);
+}
+button.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--color-ink);
+  color: white;
+}
+.btn-primary:not(:disabled):hover {
+  opacity: 0.9;
+}
+
+.btn-gradient {
+  background: var(--gradient-instagram);
+  color: white;
+}
+.btn-gradient:not(:disabled):hover {
+  opacity: 0.92;
+}
+
+.btn-secondary {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  border: 1px solid var(--color-border-strong);
+}
+.btn-secondary:not(:disabled):hover {
+  background: var(--color-surface-hover);
+}
+
+.progress {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.progress .chip {
+  flex: 1;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 11px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
+.progress .chip.done {
+  background: var(--color-green-soft);
+  border-color: transparent;
+  color: var(--color-green);
+}
+.progress .chip .count {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.bio-text {
+  font-size: 11.5px;
+  color: var(--color-ink-soft);
+  background: var(--color-surface);
+  border-radius: 10px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  margin: 8px 0;
+}
+
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  margin-top: 6px;
+  min-height: 14px;
+}
+
+.footer {
+  padding: 10px 16px 14px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--color-ink-faint);
+  border-top: 1px solid var(--color-border);
+}

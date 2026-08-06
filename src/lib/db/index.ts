@@ -1,5 +1,7 @@
 import Dexie, { type EntityTable } from "dexie";
 import type {
+  AccountBioCacheRecord,
+  AccountStatusCacheRecord,
   ExclusionRuleRecord,
   FeedbackReportRecord,
   ProtectedAccountRecord,
@@ -9,7 +11,7 @@ import type {
   SnapshotFollowingRecord,
   SnapshotRecord,
 } from "./schema";
-import { normalizeSnapshotRecord } from "./migrate";
+import { normalizeExclusionRuleRecord, normalizeSnapshotRecord } from "./migrate";
 
 export class OrblyDatabase extends Dexie {
   snapshots!: EntityTable<SnapshotRecord, "id">;
@@ -20,6 +22,8 @@ export class OrblyDatabase extends Dexie {
   protectedAccounts!: EntityTable<ProtectedAccountRecord, "id">;
   exclusionRules!: EntityTable<ExclusionRuleRecord, "id">;
   feedbackReports!: EntityTable<FeedbackReportRecord, "id">;
+  accountBioCache!: EntityTable<AccountBioCacheRecord, "id">;
+  accountStatusCache!: EntityTable<AccountStatusCacheRecord, "id">;
 
   constructor(name = "orbly-local") {
     super(name);
@@ -81,6 +85,33 @@ export class OrblyDatabase extends Dexie {
       exclusionRules: "id, &pattern, createdAt",
       feedbackReports: "id, category, status, createdAt",
     });
+
+    // Adds bio-based exclusion rules alongside username ones (a rule is now
+    // scoped by `field`, so the same pattern text can exist once per field —
+    // "nba" as a username rule and "nba" as a bio rule are independent).
+    // Also adds accountBioCache and accountStatusCache: both populated one
+    // account at a time via the browser extension's explicit, user-triggered
+    // lookup — never bulk-fetched — so a captured bio or a "no longer found"
+    // status keeps being honored everywhere that account appears afterward.
+    this.version(5)
+      .stores({
+        snapshots: "id, createdAt, datasetHash, validity",
+        snapshotFollowers: "id, snapshotId, [snapshotId+normalizedUsername], normalizedUsername",
+        snapshotFollowing: "id, snapshotId, [snapshotId+normalizedUsername], normalizedUsername",
+        queueItems: "id, normalizedUsername, status, source, addedAt",
+        settings: "id",
+        protectedAccounts: "id, &normalizedUsername, dateAdded",
+        exclusionRules: "id, &[field+pattern], createdAt, field",
+        feedbackReports: "id, category, status, createdAt",
+        accountBioCache: "id, &normalizedUsername, fetchedAt",
+        accountStatusCache: "id, &normalizedUsername, status, checkedAt",
+      })
+      .upgrade(async (tx) => {
+        const rules = await tx.table<ExclusionRuleRecord>("exclusionRules").toArray();
+        await Promise.all(
+          rules.map((rule) => tx.table("exclusionRules").update(rule.id, normalizeExclusionRuleRecord(rule)))
+        );
+      });
   }
 }
 

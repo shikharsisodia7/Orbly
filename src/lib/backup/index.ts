@@ -1,21 +1,33 @@
 import { getDb } from "@/lib/db";
 import { SCHEMA_VERSION } from "@/lib/db/schema";
-import { normalizeSnapshotRecord } from "@/lib/db/migrate";
+import { normalizeExclusionRuleRecord, normalizeSnapshotRecord } from "@/lib/db/migrate";
 import { backupFileSchema, type BackupFile } from "./schema";
 
 export async function buildBackup(): Promise<BackupFile> {
   const db = getDb();
-  const [snapshots, snapshotFollowers, snapshotFollowing, queueItems, settings, protectedAccounts, exclusionRules, feedbackReports] =
-    await Promise.all([
-      db.snapshots.toArray(),
-      db.snapshotFollowers.toArray(),
-      db.snapshotFollowing.toArray(),
-      db.queueItems.toArray(),
-      db.settings.get("app"),
-      db.protectedAccounts.toArray(),
-      db.exclusionRules.toArray(),
-      db.feedbackReports.toArray(),
-    ]);
+  const [
+    snapshots,
+    snapshotFollowers,
+    snapshotFollowing,
+    queueItems,
+    settings,
+    protectedAccounts,
+    exclusionRules,
+    feedbackReports,
+    accountBioCache,
+    accountStatusCache,
+  ] = await Promise.all([
+    db.snapshots.toArray(),
+    db.snapshotFollowers.toArray(),
+    db.snapshotFollowing.toArray(),
+    db.queueItems.toArray(),
+    db.settings.get("app"),
+    db.protectedAccounts.toArray(),
+    db.exclusionRules.toArray(),
+    db.feedbackReports.toArray(),
+    db.accountBioCache.toArray(),
+    db.accountStatusCache.toArray(),
+  ]);
 
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -28,6 +40,8 @@ export async function buildBackup(): Promise<BackupFile> {
     protectedAccounts,
     exclusionRules,
     feedbackReports,
+    accountBioCache,
+    accountStatusCache,
   };
 }
 
@@ -77,6 +91,8 @@ export async function restoreBackup(backup: BackupFile): Promise<void> {
       db.protectedAccounts,
       db.exclusionRules,
       db.feedbackReports,
+      db.accountBioCache,
+      db.accountStatusCache,
     ],
     async () => {
       await db.snapshots.clear();
@@ -87,6 +103,8 @@ export async function restoreBackup(backup: BackupFile): Promise<void> {
       await db.protectedAccounts.clear();
       await db.exclusionRules.clear();
       await db.feedbackReports.clear();
+      await db.accountBioCache.clear();
+      await db.accountStatusCache.clear();
 
       await db.snapshots.bulkAdd(backup.snapshots.map(normalizeSnapshotRecord));
       await db.snapshotFollowers.bulkAdd(backup.snapshotFollowers);
@@ -95,17 +113,24 @@ export async function restoreBackup(backup: BackupFile): Promise<void> {
       if (backup.settings) {
         await db.settings.put(backup.settings);
       }
-      // Optional: absent entirely on a backup made before that table
-      // existed, so this must not throw on old files — treated as zero
-      // rows to restore rather than a validation failure.
+      // Optional: absent entirely on a backup made before that table/field
+      // existed, so this must not throw on old files — treated as zero rows
+      // (or, for exclusionRules, backfilled via normalizeExclusionRuleRecord)
+      // rather than a validation failure.
       if (backup.protectedAccounts) {
         await db.protectedAccounts.bulkAdd(backup.protectedAccounts);
       }
       if (backup.exclusionRules) {
-        await db.exclusionRules.bulkAdd(backup.exclusionRules);
+        await db.exclusionRules.bulkAdd(backup.exclusionRules.map(normalizeExclusionRuleRecord));
       }
       if (backup.feedbackReports) {
         await db.feedbackReports.bulkAdd(backup.feedbackReports);
+      }
+      if (backup.accountBioCache) {
+        await db.accountBioCache.bulkAdd(backup.accountBioCache);
+      }
+      if (backup.accountStatusCache) {
+        await db.accountStatusCache.bulkAdd(backup.accountStatusCache);
       }
     }
   );

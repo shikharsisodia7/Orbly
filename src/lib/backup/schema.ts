@@ -75,8 +75,25 @@ export const backupExclusionRuleSchema = z.object({
   pattern: z.string(),
   rawPattern: z.string(),
   matchMode: z.enum(["contains", "startsWith", "endsWith"]),
+  // Optional so a backup made before bio rules existed still restores —
+  // normalizeExclusionRuleRecord() backfills "username" on the way back in.
+  field: z.enum(["username", "bio"]).optional(),
   note: z.string().nullable(),
   createdAt: z.string(),
+});
+
+export const backupAccountBioCacheSchema = z.object({
+  id: z.string(),
+  normalizedUsername: z.string(),
+  bio: z.string(),
+  fetchedAt: z.string(),
+});
+
+export const backupAccountStatusCacheSchema = z.object({
+  id: z.string(),
+  normalizedUsername: z.string(),
+  status: z.enum(["active", "private", "not_found"]),
+  checkedAt: z.string(),
 });
 
 export const backupFeedbackReportSchema = z.object({
@@ -106,6 +123,8 @@ export const backupFileSchema = z.object({
   protectedAccounts: z.array(backupProtectedAccountSchema).optional(),
   exclusionRules: z.array(backupExclusionRuleSchema).optional(),
   feedbackReports: z.array(backupFeedbackReportSchema).optional(),
+  accountBioCache: z.array(backupAccountBioCacheSchema).optional(),
+  accountStatusCache: z.array(backupAccountStatusCacheSchema).optional(),
 });
 
 export type BackupFile = z.infer<typeof backupFileSchema>;

@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Ban, Check, Download, ExternalLink, FileSpreadsheet, History, ListChecks, Shield, ShieldOff, UploadCloud, UserCheck, UserMinus, UserPlus, UserX, Users, X } from "lucide-react";
+import { AlertTriangle, Ban, Check, Download, ExternalLink, FileSpreadsheet, History, ListChecks, Lock, Shield, ShieldOff, UploadCloud, UserCheck, UserMinus, UserPlus, UserX, Users, X } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { AnimatedCounter } from "@/components/motion/AnimatedCounter";
 import { ValidityBadge } from "@/components/ui/ValidityBadge";
 import { formatCount } from "@/lib/utils/format";
 import type { DatasetValidity } from "@/lib/instagram/validity";
+import type { AccountLiveStatus } from "@/lib/db/schema";
+import { addExclusionRule } from "@/lib/instagram/chat-tools";
 import { DoesNotFollowBackList } from "./DoesNotFollowBackList";
 
 /**
@@ -170,6 +172,9 @@ interface CheckAccountOutput {
   youFollow: boolean;
   followsYouSinceTimestamp: number | null;
   youFollowSinceTimestamp: number | null;
+  bio: string | null;
+  liveStatus: AccountLiveStatus | null;
+  liveStatusCheckedAt: string | null;
 }
 
 function StatusPill({ label, value, sinceTimestamp }: { label: string; value: boolean; sinceTimestamp: number | null }) {
@@ -194,6 +199,52 @@ function StatusPill({ label, value, sinceTimestamp }: { label: string; value: bo
   );
 }
 
+/**
+ * Lets the user add a bio-based exclusion rule right where they're already
+ * looking at the captured bio, instead of having to phrase it out in chat.
+ * Only ever offered for an account whose bio Orbly actually has — see
+ * exclusion-rules.ts: a bio rule can never match an account nobody's looked up.
+ */
+function BioExclusionForm() {
+  const [pattern, setPattern] = useState("");
+  const [status, setStatus] = useState<"idle" | "saving" | "done">("idle");
+
+  async function handleAdd() {
+    const trimmed = pattern.trim();
+    if (!trimmed || status === "saving") return;
+    setStatus("saving");
+    await addExclusionRule({ pattern: trimmed, field: "bio" });
+    setStatus("done");
+  }
+
+  if (status === "done") {
+    return (
+      <p className="flex items-center gap-1.5 text-[11px] font-medium text-green">
+        <Check size={11} /> Bio exclusion rule added — accounts with &quot;{pattern.trim()}&quot; in a captured bio are
+        now permanently excluded.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <input
+        value={pattern}
+        onChange={(e) => setPattern(e.target.value)}
+        placeholder="Exclude accounts whose bio has…"
+        className="h-7 flex-1 rounded-md border border-border-strong bg-white px-2 text-[11px] text-ink placeholder:text-ink-faint focus:border-ink/30 focus:outline-none"
+      />
+      <button
+        onClick={handleAdd}
+        disabled={!pattern.trim() || status === "saving"}
+        className="h-7 shrink-0 rounded-md bg-ink px-2 text-[11px] font-medium text-white disabled:opacity-40"
+      >
+        Add
+      </button>
+    </div>
+  );
+}
+
 function CheckAccountCard({ output }: { output: CheckAccountOutput }) {
   return (
     <motion.div
@@ -206,8 +257,30 @@ function CheckAccountCard({ output }: { output: CheckAccountOutput }) {
         <Avatar username={output.normalizedUsername} size={32} />
         <span className="font-medium text-ink">@{output.normalizedUsername}</span>
       </div>
+
+      {output.liveStatus === "not_found" && (
+        <div className="flex items-center gap-2 rounded-lg bg-rose-soft px-3 py-2 text-xs font-medium text-rose">
+          <AlertTriangle size={13} className="shrink-0" />
+          No longer active — confirmed gone
+          {output.liveStatusCheckedAt ? ` on ${new Date(output.liveStatusCheckedAt).toLocaleDateString()}` : ""}.
+          Excluded from every list.
+        </div>
+      )}
+      {output.liveStatus === "private" && (
+        <div className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2 text-xs text-ink-soft">
+          <Lock size={12} className="shrink-0" /> Private account
+        </div>
+      )}
+
       <StatusPill label="Follows you" value={output.followsYou} sinceTimestamp={output.followsYouSinceTimestamp} />
       <StatusPill label="You follow them" value={output.youFollow} sinceTimestamp={output.youFollowSinceTimestamp} />
+
+      {output.bio && (
+        <div className="space-y-1.5 rounded-lg border border-border bg-surface p-2.5">
+          <p className="text-[11px] whitespace-pre-wrap text-ink-soft">{output.bio}</p>
+          <BioExclusionForm />
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -477,6 +550,7 @@ function ProtectedAccountsCard({ output }: { output: ProtectedAccountsOutput }) 
 
 interface ExclusionRuleOutput {
   pattern: string;
+  field: "username" | "bio";
   matchMode: "contains" | "startsWith" | "endsWith";
   note: string | null;
   createdAt: string;
@@ -487,6 +561,12 @@ const MATCH_MODE_LABEL: Record<ExclusionRuleOutput["matchMode"], string> = {
   startsWith: "starts with",
   endsWith: "ends with",
 };
+
+function ruleDescription(r: ExclusionRuleOutput): string {
+  return r.field === "bio"
+    ? `bios that ${MATCH_MODE_LABEL[r.matchMode]} "${r.pattern}"`
+    : `usernames that ${MATCH_MODE_LABEL[r.matchMode]} "${r.pattern}"`;
+}
 
 interface AddExclusionRuleOutput {
   available: true;
@@ -500,9 +580,10 @@ function AddExclusionRuleCard({ output }: { output: AddExclusionRuleOutput }) {
         <Ban size={14} />
       </div>
       <span>
-        Usernames that {MATCH_MODE_LABEL[output.rule.matchMode]} &quot;{output.rule.pattern}&quot; are now permanently
-        excluded from unfollow suggestions{output.rule.note ? ` — ${output.rule.note}` : ""}. This has no override —
-        they&apos;ll never be suggested, even if asked to include protected accounts.
+        Accounts with {ruleDescription(output.rule)} are now permanently excluded from unfollow
+        suggestions{output.rule.note ? ` — ${output.rule.note}` : ""}. This has no override — they&apos;ll never be
+        suggested, even if asked to include protected accounts.
+        {output.rule.field === "bio" && " Only ever applies to accounts whose bio has actually been looked up."}
       </span>
     </div>
   );
@@ -550,16 +631,14 @@ function ListExclusionRulesCard({ output }: { output: ListExclusionRulesOutput }
       <div className="space-y-1">
         {output.rules.map((r, i) => (
           <motion.div
-            key={r.pattern}
+            key={`${r.field}:${r.pattern}`}
             custom={i}
             variants={staggerItem}
             initial="hidden"
             animate="show"
             className="rounded-lg px-2 py-1.5"
           >
-            <p className="text-sm text-ink">
-              {MATCH_MODE_LABEL[r.matchMode]} &quot;{r.pattern}&quot;
-            </p>
+            <p className="text-sm text-ink">{ruleDescription(r)}</p>
             {r.note && <p className="text-[11px] text-ink-faint">{r.note}</p>}
           </motion.div>
         ))}

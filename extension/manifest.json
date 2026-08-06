@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Orbly Companion",
+  "version": "1.0.0",
+  "description": "Manually capture your Instagram followers/following, or look up one account's bio, and sync it into Orbly — only when you click. No login automation, no background activity, no automated Instagram requests.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "https://www.instagram.com/*",
+    "http://localhost:3000/*",
+    "https://orbly-drab.vercel.app/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.instagram.com/*"],
+      "js": ["content-scripts/instagram.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://localhost:3000/app/extension-sync*",
+        "https://orbly-drab.vercel.app/app/extension-sync*"
+      ],
+      "js": ["content-scripts/bridge.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

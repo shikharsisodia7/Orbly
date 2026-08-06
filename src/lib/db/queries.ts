@@ -1,5 +1,9 @@
 import { getDb } from "./index";
 import type {
+  AccountBioCacheRecord,
+  AccountLiveStatus,
+  AccountStatusCacheRecord,
+  ExclusionField,
   ExclusionMatchMode,
   ExclusionRuleRecord,
   FeedbackCategory,
@@ -174,6 +178,8 @@ export async function deleteAllData(): Promise<void> {
       db.protectedAccounts,
       db.exclusionRules,
       db.feedbackReports,
+      db.accountBioCache,
+      db.accountStatusCache,
     ],
     async () => {
       await db.snapshots.clear();
@@ -184,6 +190,8 @@ export async function deleteAllData(): Promise<void> {
       await db.protectedAccounts.clear();
       await db.exclusionRules.clear();
       await db.feedbackReports.clear();
+      await db.accountBioCache.clear();
+      await db.accountStatusCache.clear();
     }
   );
 }
@@ -390,18 +398,24 @@ export async function updateSettings(patch: Partial<SettingsRecord>): Promise<Se
 export interface AddExclusionRuleInput {
   rawPattern: string;
   matchMode: ExclusionMatchMode;
+  /** Defaults to "username" — the only kind that existed before bio rules. */
+  field?: ExclusionField;
   note?: string | null;
 }
 
 /**
  * Adds a persistent exclusion rule, or updates the existing rule's mode/note
- * if the same normalized pattern is added again — &pattern is a unique
- * index, so this never creates a duplicate rule for the same text.
+ * if the same normalized pattern is added again for the same field —
+ * &[field+pattern] is a unique compound index, so "nba" as a username rule
+ * and "nba" as a bio rule are independent and can coexist, but re-adding the
+ * exact same field+pattern pair updates the existing rule rather than
+ * duplicating it.
  */
 export async function addExclusionRule(input: AddExclusionRuleInput): Promise<ExclusionRuleRecord> {
   const db = getDb();
+  const field: ExclusionField = input.field ?? "username";
   const pattern = normalizeQueryText(input.rawPattern);
-  const existing = await db.exclusionRules.where("pattern").equals(pattern).first();
+  const existing = await db.exclusionRules.where("[field+pattern]").equals([field, pattern]).first();
   if (existing) {
     const updated: ExclusionRuleRecord = {
       ...existing,
@@ -416,6 +430,7 @@ export async function addExclusionRule(input: AddExclusionRuleInput): Promise<Ex
     pattern,
     rawPattern: input.rawPattern.trim(),
     matchMode: input.matchMode,
+    field,
     note: input.note ?? null,
     createdAt: new Date().toISOString(),
   };
@@ -424,10 +439,10 @@ export async function addExclusionRule(input: AddExclusionRuleInput): Promise<Ex
 }
 
 /** Returns true if a matching rule was found and removed, false if there was nothing to remove. */
-export async function removeExclusionRule(rawPattern: string): Promise<boolean> {
+export async function removeExclusionRule(rawPattern: string, field: ExclusionField = "username"): Promise<boolean> {
   const db = getDb();
   const pattern = normalizeQueryText(rawPattern);
-  const existing = await db.exclusionRules.where("pattern").equals(pattern).first();
+  const existing = await db.exclusionRules.where("[field+pattern]").equals([field, pattern]).first();
   if (!existing) return false;
   await db.exclusionRules.delete(existing.id);
   return true;
@@ -436,6 +451,71 @@ export async function removeExclusionRule(rawPattern: string): Promise<boolean> 
 export async function getExclusionRules(): Promise<ExclusionRuleRecord[]> {
   const all = await getDb().exclusionRules.toArray();
   return all.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+// --- Account bio cache (one account at a time, via the browser extension) ---
+
+/**
+ * Caches the bio text for one account, captured by the browser extension at
+ * the moment the user was actively viewing that profile — never bulk
+ * fetched. &normalizedUsername: re-capturing the same account overwrites
+ * its previous bio rather than accumulating history.
+ */
+export async function cacheAccountBio(normalizedUsername: string, bio: string): Promise<AccountBioCacheRecord> {
+  const db = getDb();
+  const existing = await db.accountBioCache.where("normalizedUsername").equals(normalizedUsername).first();
+  const record: AccountBioCacheRecord = {
+    id: existing?.id ?? newId(),
+    normalizedUsername,
+    bio,
+    fetchedAt: new Date().toISOString(),
+  };
+  await db.accountBioCache.put(record);
+  return record;
+}
+
+export async function getCachedBio(normalizedUsername: string): Promise<string | null> {
+  const record = await getDb().accountBioCache.where("normalizedUsername").equals(normalizedUsername).first();
+  return record?.bio ?? null;
+}
+
+/** Every captured bio, keyed by normalized username — used to evaluate bio exclusion rules across a list without a per-row DB round trip. */
+export async function getAllCachedBios(): Promise<Map<string, string>> {
+  const all = await getDb().accountBioCache.toArray();
+  return new Map(all.map((r) => [r.normalizedUsername, r.bio]));
+}
+
+// --- Account live-status cache (one account at a time, via the browser extension) ---
+
+/**
+ * Records the live status of one account, checked by the browser extension
+ * at the moment the user was actively viewing that profile — never bulk
+ * checked. &normalizedUsername: the most recent check wins.
+ */
+export async function setAccountStatus(
+  normalizedUsername: string,
+  status: AccountLiveStatus
+): Promise<AccountStatusCacheRecord> {
+  const db = getDb();
+  const existing = await db.accountStatusCache.where("normalizedUsername").equals(normalizedUsername).first();
+  const record: AccountStatusCacheRecord = {
+    id: existing?.id ?? newId(),
+    normalizedUsername,
+    status,
+    checkedAt: new Date().toISOString(),
+  };
+  await db.accountStatusCache.put(record);
+  return record;
+}
+
+export async function getAccountStatus(normalizedUsername: string): Promise<AccountStatusCacheRecord | undefined> {
+  return getDb().accountStatusCache.where("normalizedUsername").equals(normalizedUsername).first();
+}
+
+/** Usernames confirmed gone (banned/deactivated/deleted) at the time they were last looked up — excluded from every list, the same way a deleted-placeholder username already is. */
+export async function getNotFoundUsernames(): Promise<Set<string>> {
+  const all = await getDb().accountStatusCache.where("status").equals("not_found").toArray();
+  return new Set(all.map((r) => r.normalizedUsername));
 }
 
 // --- Feedback reports (self-service, in-app bug reports) ---

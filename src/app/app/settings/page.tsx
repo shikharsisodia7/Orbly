@@ -1,9 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Download, Upload, Trash2, ShieldCheck } from "lucide-react";
+import { Download, Upload, Trash2, ShieldCheck, PlugZap } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Button } from "@/components/ui/Button";
+import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Dialog } from "@/components/ui/Dialog";
 import { useSnapshots } from "@/hooks/useSnapshots";
 import { useSettings } from "@/hooks/useSettings";
@@ -120,6 +121,22 @@ export default function SettingsPage() {
                 Delete Everything
               </Button>
             </div>
+          </div>
+        </section>
+
+        <section>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Browser Extension</h2>
+          <div className="mt-3 flex flex-col gap-3 rounded-2xl border border-border bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-medium text-ink">Sync from the Orbly extension</p>
+              <p className="text-xs text-ink-soft">
+                Open your followers/following list on Instagram yourself, click the Orbly extension icon, then
+                Sync. This page receives it — nothing runs unless you trigger it there first.
+              </p>
+            </div>
+            <ButtonLink href="/app/extension-sync" variant="secondary" size="sm" className="gap-1.5 shrink-0">
+              <PlugZap size={14} /> Open Sync Page
+            </ButtonLink>
           </div>
         </section>
 

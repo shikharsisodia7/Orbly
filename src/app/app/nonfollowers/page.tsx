@@ -10,6 +10,8 @@ import { useCurrentRelationships } from "@/hooks/useRelationships";
 import { useResolvedUsernames } from "@/hooks/useResolvedUsernames";
 import { useProtectedUsernames } from "@/hooks/useProtectedUsernames";
 import { useExclusionRules } from "@/hooks/useExclusionRules";
+import { useNotFoundUsernames } from "@/hooks/useAccountStatusCache";
+import { useCachedBios } from "@/hooks/useAccountBioCache";
 import { matchesAnyExclusionRule } from "@/lib/instagram/exclusion-rules";
 
 function NonfollowersContent({ snapshotId }: { snapshotId: string }) {
@@ -17,6 +19,8 @@ function NonfollowersContent({ snapshotId }: { snapshotId: string }) {
   const resolved = useResolvedUsernames();
   const protectedUsernames = useProtectedUsernames();
   const exclusionRules = useExclusionRules();
+  const notFoundUsernames = useNotFoundUsernames();
+  const bios = useCachedBios();
 
   const active = useMemo(() => {
     if (!relationships) return [];
@@ -24,9 +28,10 @@ function NonfollowersContent({ snapshotId }: { snapshotId: string }) {
       (r) =>
         !resolved.has(r.normalizedUsername) &&
         !protectedUsernames.has(r.normalizedUsername) &&
-        !matchesAnyExclusionRule(r.normalizedUsername, exclusionRules)
+        !notFoundUsernames.has(r.normalizedUsername) &&
+        !matchesAnyExclusionRule({ normalizedUsername: r.normalizedUsername, bio: bios.get(r.normalizedUsername) }, exclusionRules)
     );
-  }, [relationships, resolved, protectedUsernames, exclusionRules]);
+  }, [relationships, resolved, protectedUsernames, notFoundUsernames, bios, exclusionRules]);
 
   if (!relationships) return null;
 
@@ -44,9 +49,10 @@ function NonfollowersContent({ snapshotId }: { snapshotId: string }) {
         <p className="mb-4 rounded-lg bg-surface px-3 py-2 text-xs text-ink-soft">
           {hiddenCount} {hiddenCount === 1 ? "account is" : "accounts are"} hidden because you
           already marked {hiddenCount === 1 ? "it" : "them"} done or skipped in your queue, protected
-          {hiddenCount === 1 ? " it" : " them"}, or {hiddenCount === 1 ? "it matches" : "they match"} an
-          exclusion rule. They stay hidden across every future import too, until you undo that in the
-          queue, your protected accounts, or your exclusion rules.
+          {hiddenCount === 1 ? " it" : " them"}, confirmed {hiddenCount === 1 ? "it's" : "they're"} no
+          longer there, or {hiddenCount === 1 ? "it matches" : "they match"} an exclusion rule. They
+          stay hidden across every future import too, until you undo that in the queue, your protected
+          accounts, or your exclusion rules.
         </p>
       )}
 
