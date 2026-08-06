@@ -20,6 +20,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^4.0.30",
     "@ai-sdk/react": "^4.0.43",
     "ai": "^7.0.40",
     "clsx": "^2.1.1",

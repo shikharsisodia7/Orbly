@@ -15,6 +15,7 @@ import { ToolResultCard } from "@/components/chat/ToolResultCard";
 import { ChatMarkdown } from "@/components/chat/ChatMarkdown";
 import { CheckNowPanel } from "@/components/dashboard/CheckNowPanel";
 import { Dialog } from "@/components/ui/Dialog";
+import type { ChatModelId } from "@/app/api/chat/route";
 import { useSnapshots } from "@/hooks/useSnapshots";
 import { parseInstagramExport } from "@/lib/instagram/parser";
 import { hashDataset } from "@/lib/instagram/hash";
@@ -77,6 +78,7 @@ export default function ChatPage() {
   const [manualUploadOpen, setManualUploadOpen] = useState(false);
   const [clearAllOpen, setClearAllOpen] = useState(false);
   const [justImportedSnapshotId, setJustImportedSnapshotId] = useState<string | null>(null);
+  const [chatModel, setChatModel] = useState<ChatModelId>("claude");
   const showUpload = loaded && (!hasData || manualUploadOpen);
 
   async function handleClearAll() {
@@ -151,7 +153,7 @@ export default function ChatPage() {
 
   const autoRetriedRef = useRef(false);
   const { messages, sendMessage, addToolOutput, status, error, regenerate } = useChat({
-    transport: new DefaultChatTransport({ api: "/api/chat" }),
+    transport: new DefaultChatTransport({ api: "/api/chat", body: { model: chatModel } }),
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
     onError: (err) => {
       if (process.env.NODE_ENV === "development") console.error(err);
@@ -347,10 +349,10 @@ export default function ChatPage() {
       )}
 
       <p className="mb-4 rounded-lg bg-surface px-3 py-2 text-xs text-ink-soft">
-        When you ask about your own account, relevant data from your imported snapshot is sent to
-        Anthropic&apos;s API to generate a response. Your export file itself is only ever parsed
-        locally in your browser and stored on this device — this is the one feature that sends
-        anything off of it.
+        When you ask about your own account, relevant data from your imported snapshot is sent to{" "}
+        {chatModel === "gpt" ? "OpenAI's" : "Anthropic's"} API — whichever model is selected below — to
+        generate a response. Your export file itself is only ever parsed locally in your browser and
+        stored on this device — this is the one feature that sends anything off of it.
       </p>
 
       {justImportedSnapshotId && (
@@ -582,8 +584,33 @@ export default function ChatPage() {
           <div ref={scrollAnchorRef} />
         </div>
 
+        <div className="flex items-center gap-1.5 border-t border-border px-3 pt-2.5">
+          <span className="text-[11px] text-ink-faint">Model</span>
+          {(
+            [
+              { id: "claude" as const, label: "Claude" },
+              { id: "gpt" as const, label: "GPT-4" },
+            ]
+          ).map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => setChatModel(opt.id)}
+              disabled={busy}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50",
+                chatModel === opt.id
+                  ? "border-ink bg-ink text-white"
+                  : "border-border-strong text-ink-soft hover:bg-surface"
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+
         <form
-          className="flex items-center gap-2 border-t border-border px-3 py-3"
+          className="flex items-center gap-2 px-3 py-3"
           onSubmit={(e) => {
             e.preventDefault();
             submit(input);

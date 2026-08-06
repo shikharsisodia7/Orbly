@@ -1,4 +1,5 @@
-import { convertToModelMessages, createUIMessageStreamResponse, streamText, toUIMessageStream, type UIMessage } from "ai";
+import { convertToModelMessages, createUIMessageStreamResponse, streamText, toUIMessageStream, type LanguageModel, type UIMessage } from "ai";
+import { openai } from "@ai-sdk/openai";
 import {
   CHAT_TOOL_DESCRIPTIONS,
   addExclusionRuleInputSchema,
@@ -49,11 +50,25 @@ If the user reports something broken, wrong, or missing — a bug, a stale/incor
 
 Keep responses conversational and concise — this is a chat, not a report. Numbers and lists render as their own UI elements via tool calls, so your text should frame and interpret them, not repeat them verbatim. This also applies across turns: don't re-state a username, count, or fact the user already told you earlier in the conversation back to them as if it were new information — refer to it briefly ("that account," "the same list as before") instead of repeating it in full each time. you have the github: https://github.com/shikharsisodia7/Orbly and the vercel website: orbly-drab.vercel.app`;
 
+export type ChatModelId = "claude" | "gpt";
+
+/**
+ * Claude runs through the Vercel AI Gateway, same as before (no key needed
+ * locally when deployed on Vercel). GPT runs directly against OpenAI's own
+ * API via OPENAI_API_KEY — the user picks between them in the chat's model
+ * switcher; Claude stays the default whenever `model` is omitted or
+ * unrecognized, so this is purely additive to existing behavior.
+ */
+export function resolveModel(requested: unknown): LanguageModel {
+  if (requested === "gpt") return openai("gpt-4o");
+  return "anthropic/claude-sonnet-5";
+}
+
 export async function POST(req: Request) {
-  const { messages }: { messages: UIMessage[] } = await req.json();
+  const { messages, model }: { messages: UIMessage[]; model?: ChatModelId } = await req.json();
 
   const result = streamText({
-    model: "anthropic/claude-sonnet-5",
+    model: resolveModel(model),
     instructions: SYSTEM_PROMPT,
     messages: await convertToModelMessages(messages),
     tools: {
