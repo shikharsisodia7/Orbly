@@ -120,6 +120,10 @@ async function renderListState(tabId, context) {
 
   const wrapper = el(`<div></div>`);
 
+  wrapper.appendChild(
+    context.pageType === "followers-list" ? renderCheckNowCard(tabId) : renderCheckNowNudge()
+  );
+
   const captureCard = el(`
     <div class="card">
       <div class="row">
@@ -161,6 +165,139 @@ async function renderListState(tabId, context) {
   wrapper.appendChild(captureCard);
   renderProgress(wrapper, session);
   return wrapper;
+}
+
+/**
+ * The fast path: one click, reads the followers list already rendered on
+ * this page, sends it for a diff against whatever Orbly already has, and
+ * shows the result right here in the popup — the user never has to look at
+ * the Orbly tab, which opens in the background purely to run the
+ * comparison (it has the IndexedDB access this popup doesn't).
+ */
+function renderCheckNowCard(tabId) {
+  const card = el(`
+    <div class="card">
+      <p class="label">Check for unfollowers now</p>
+      <p class="hint">Reads this followers list and compares it to your last check — one click.</p>
+      <button class="btn btn-gradient" style="margin-top:10px" id="checknow-btn">Check Now</button>
+      <div class="status-line" id="checknow-status"></div>
+      <div id="checknow-result"></div>
+    </div>
+  `);
+
+  const btn = card.querySelector("#checknow-btn");
+  const statusLine = card.querySelector("#checknow-status");
+  const resultBox = card.querySelector("#checknow-result");
+
+  btn.addEventListener("click", async () => {
+    if (!actionAllowed()) return;
+    btn.disabled = true;
+    resultBox.innerHTML = "";
+    statusLine.textContent = "Reading your followers…";
+
+    const scraped = await sendToTab(tabId, { type: "ORBLY_SCRAPE_LIST" });
+    if (!scraped || !Array.isArray(scraped.accounts)) {
+      statusLine.innerHTML = `<span class="badge badge-rose">Couldn't read this list — try scrolling it into view first.</span>`;
+      btn.disabled = false;
+      return;
+    }
+
+    statusLine.textContent = "Comparing with Orbly…";
+    const requestId = crypto.randomUUID();
+    await chrome.storage.local.set({
+      [PENDING_PAYLOAD_KEY]: {
+        type: "orbly-extension-check-request",
+        version: 1,
+        requestId,
+        followers: scraped.accounts,
+      },
+    });
+    await ensureOrblySyncTabOpen();
+    const result = await waitForCheckResult(requestId, 20000);
+    btn.disabled = false;
+
+    if (!result) {
+      statusLine.innerHTML = `<span class="badge badge-rose">No response from Orbly — make sure orbly-drab.vercel.app can load, then try again.</span>`;
+      return;
+    }
+    statusLine.textContent = "";
+    renderCheckResult(resultBox, result);
+  });
+
+  return card;
+}
+
+function renderCheckNowNudge() {
+  const card = el(`
+    <div class="card">
+      <p class="label">Check for unfollowers now</p>
+      <p class="hint">This checks your followers, not following — open your followers list to check.</p>
+    </div>
+  `);
+  return card;
+}
+
+/** Resolves with the check result once the extension background/runtime receives it, or null after timing out. */
+function waitForCheckResult(requestId, timeoutMs) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      chrome.runtime.onMessage.removeListener(listener);
+      resolve(null);
+    }, timeoutMs);
+
+    function listener(message) {
+      if (settled || message?.type !== "ORBLY_CHECK_RESULT" || message.requestId !== requestId) return;
+      settled = true;
+      clearTimeout(timer);
+      chrome.runtime.onMessage.removeListener(listener);
+      resolve(message.result);
+    }
+
+    chrome.runtime.onMessage.addListener(listener);
+  });
+}
+
+function renderCheckResult(container, result) {
+  const renderList = (items) =>
+    items.length
+      ? items
+          .map(
+            (item) =>
+              `<a class="status-line" style="justify-content:flex-start" href="${item.profileUrl}" target="_blank" rel="noopener noreferrer">@${escapeHtml(item.username)}</a>`
+          )
+          .join("")
+      : `<p class="hint">None.</p>`;
+
+  const el2 = document.createElement("div");
+  el2.className = "card";
+  el2.style.marginTop = "10px";
+  el2.innerHTML = `
+    <p class="label">
+      ${
+        result.isFirstCheck
+          ? "First check — baseline recorded"
+          : "Compared to " + new Date(result.previousCheckedAt).toLocaleString()
+      }
+    </p>
+    ${result.excludedCount > 0 ? `<p class="hint">${result.excludedCount} unfollow${result.excludedCount === 1 ? "" : "s"} hidden by protection/exclusion rules.</p>` : ""}
+    <p class="label" style="margin-top:8px">Unfollowed you (${result.unfollowed.length})</p>
+    ${renderList(result.unfollowed)}
+    <p class="label" style="margin-top:8px">New followers (${result.newFollowers.length})</p>
+    ${renderList(result.newFollowers)}
+  `;
+  container.innerHTML = "";
+  container.appendChild(el2);
+}
+
+/** Opens the Orbly tab in the background (if not already open) so the popup keeps the user's attention — Check Now never needs them to look away from Instagram. */
+async function ensureOrblySyncTabOpen() {
+  const allTabs = await chrome.tabs.query({});
+  const existing = allTabs.find((t) => t.url && ORBLY_SYNC_URLS.some((u) => t.url.startsWith(u)));
+  if (existing) return existing;
+  return chrome.tabs.create({ url: DEFAULT_SYNC_URL, active: false });
 }
 
 function renderProgress(wrapper, session) {

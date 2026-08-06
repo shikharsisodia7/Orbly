@@ -95,6 +95,17 @@ describe("parseExtensionMessage", () => {
     expect(parseExtensionMessage(payload).type).toBe("orbly-extension-status");
   });
 
+  it("accepts a valid check-request payload", () => {
+    const payload = {
+      type: "orbly-extension-check-request",
+      version: 1,
+      requestId: "req-1",
+      followers: [{ username: "alice", href: "https://www.instagram.com/alice/" }],
+    };
+    const parsed = parseExtensionMessage(payload);
+    expect(parsed.type).toBe("orbly-extension-check-request");
+  });
+
   it("rejects a malformed payload rather than silently coercing it", () => {
     expect(() => parseExtensionMessage({ type: "orbly-extension-sync" })).toThrow(ExtensionMessageValidationError);
   });

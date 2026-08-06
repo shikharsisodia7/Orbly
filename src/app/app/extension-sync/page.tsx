@@ -19,7 +19,9 @@ import {
   parseExtensionMessage,
   ExtensionMessageValidationError,
   type ExtensionMessage,
+  type ExtensionCheckResultMessage,
 } from "@/lib/instagram/extension-sync";
+import { runCheckNow } from "@/lib/instagram/check-now";
 
 /**
  * The receiving end of the browser extension's manual "Sync to Orbly"
@@ -94,6 +96,25 @@ export default function ExtensionSyncPage() {
       if (message.type === "orbly-extension-status") {
         await setAccountStatus(normalizeUsername(message.username), message.status);
         pushLog("success", `Recorded @${normalizeUsername(message.username)} as "${message.status}".`);
+        return;
+      }
+      if (message.type === "orbly-extension-check-request") {
+        const { relationships } = normalizeExtensionScrapedList(message.followers);
+        const result = await runCheckNow(relationships, "extension");
+        const reply: ExtensionCheckResultMessage = {
+          type: "orbly-check-result",
+          requestId: message.requestId,
+          result,
+        };
+        // Sent the other direction — page to content script to popup — so
+        // the bridge script can relay it back to the extension via
+        // chrome.runtime.sendMessage. Tagged "orbly-page" (not
+        // "orbly-extension") so the two directions can never be confused.
+        window.postMessage({ source: "orbly-page", ...reply }, window.location.origin);
+        pushLog(
+          "success",
+          `Check complete — ${result.unfollowed.length} unfollowed, ${result.newFollowers.length} new. Sent back to the extension.`
+        );
       }
     }
 

@@ -16,6 +16,8 @@ export async function buildBackup(): Promise<BackupFile> {
     feedbackReports,
     accountBioCache,
     accountStatusCache,
+    followerChecks,
+    followerCheckEntries,
   ] = await Promise.all([
     db.snapshots.toArray(),
     db.snapshotFollowers.toArray(),
@@ -27,6 +29,8 @@ export async function buildBackup(): Promise<BackupFile> {
     db.feedbackReports.toArray(),
     db.accountBioCache.toArray(),
     db.accountStatusCache.toArray(),
+    db.followerChecks.toArray(),
+    db.followerCheckEntries.toArray(),
   ]);
 
   return {
@@ -42,6 +46,8 @@ export async function buildBackup(): Promise<BackupFile> {
     feedbackReports,
     accountBioCache,
     accountStatusCache,
+    followerChecks,
+    followerCheckEntries,
   };
 }
 
@@ -93,6 +99,8 @@ export async function restoreBackup(backup: BackupFile): Promise<void> {
       db.feedbackReports,
       db.accountBioCache,
       db.accountStatusCache,
+      db.followerChecks,
+      db.followerCheckEntries,
     ],
     async () => {
       await db.snapshots.clear();
@@ -105,6 +113,8 @@ export async function restoreBackup(backup: BackupFile): Promise<void> {
       await db.feedbackReports.clear();
       await db.accountBioCache.clear();
       await db.accountStatusCache.clear();
+      await db.followerChecks.clear();
+      await db.followerCheckEntries.clear();
 
       await db.snapshots.bulkAdd(backup.snapshots.map(normalizeSnapshotRecord));
       await db.snapshotFollowers.bulkAdd(backup.snapshotFollowers);
@@ -131,6 +141,12 @@ export async function restoreBackup(backup: BackupFile): Promise<void> {
       }
       if (backup.accountStatusCache) {
         await db.accountStatusCache.bulkAdd(backup.accountStatusCache);
+      }
+      if (backup.followerChecks) {
+        await db.followerChecks.bulkAdd(backup.followerChecks);
+      }
+      if (backup.followerCheckEntries) {
+        await db.followerCheckEntries.bulkAdd(backup.followerCheckEntries);
       }
     }
   );

@@ -105,6 +105,25 @@ export const backupFeedbackReportSchema = z.object({
   createdAt: z.string(),
 });
 
+export const backupFollowerCheckSchema = z.object({
+  id: z.string(),
+  checkedAt: z.string(),
+  source: z.enum(["extension", "web-import"]),
+  snapshotId: z.string().nullable(),
+  comparedToCheckedAt: z.string().nullable(),
+  unfollowedCount: z.number(),
+  newFollowerCount: z.number(),
+  excludedCount: z.number(),
+});
+
+export const backupFollowerCheckEntrySchema = z.object({
+  id: z.string(),
+  checkId: z.string(),
+  normalizedUsername: z.string(),
+  displayUsername: z.string(),
+  profileUrl: z.string(),
+});
+
 export const backupFileSchema = z.object({
   schemaVersion: z.number(),
   exportedAt: z.string(),
@@ -125,6 +144,8 @@ export const backupFileSchema = z.object({
   feedbackReports: z.array(backupFeedbackReportSchema).optional(),
   accountBioCache: z.array(backupAccountBioCacheSchema).optional(),
   accountStatusCache: z.array(backupAccountStatusCacheSchema).optional(),
+  followerChecks: z.array(backupFollowerCheckSchema).optional(),
+  followerCheckEntries: z.array(backupFollowerCheckEntrySchema).optional(),
 });
 
 export type BackupFile = z.infer<typeof backupFileSchema>;

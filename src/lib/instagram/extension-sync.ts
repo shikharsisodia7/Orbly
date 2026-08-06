@@ -105,12 +105,44 @@ export const extensionStatusPayloadSchema = z.object({
 });
 export type ExtensionStatusPayload = z.infer<typeof extensionStatusPayloadSchema>;
 
+/**
+ * A "Check Now" request: a fresh followers-list scrape from the followers
+ * page the user was actively viewing, sent for an immediate diff against
+ * whatever followers data Orbly already has on file. `requestId` lets the
+ * page's response (see ExtensionCheckResultMessage below) be matched back
+ * to this specific request in the popup, since the popup could in
+ * principle have more than one check in flight across reopens.
+ */
+export const extensionCheckRequestSchema = z.object({
+  type: z.literal("orbly-extension-check-request"),
+  version: z.literal(1),
+  requestId: z.string(),
+  followers: z.array(rawScrapedAccountSchema),
+});
+export type ExtensionCheckRequestPayload = z.infer<typeof extensionCheckRequestSchema>;
+
 export const extensionMessageSchema = z.discriminatedUnion("type", [
   extensionSyncPayloadSchema,
   extensionBioPayloadSchema,
   extensionStatusPayloadSchema,
+  extensionCheckRequestSchema,
 ]);
 export type ExtensionMessage = z.infer<typeof extensionMessageSchema>;
+
+/**
+ * The page's reply to a check request, carrying the actual CheckNowResult
+ * (see check-now.ts). Sent the other direction — page to content script to
+ * popup — via a separately-tagged postMessage (source: "orbly-page", not
+ * "orbly-extension") so the bridge content script never confuses a reply
+ * with an incoming request. Not schema-validated on the way out: it's
+ * produced by Orbly's own trusted code, not treated as untrusted input the
+ * way an incoming extension message is.
+ */
+export interface ExtensionCheckResultMessage {
+  type: "orbly-check-result";
+  requestId: string;
+  result: unknown; // CheckNowResult from check-now.ts — kept as unknown here to avoid this pure module depending on the Dexie-backed check-now module.
+}
 
 export class ExtensionMessageValidationError extends Error {}
 

@@ -91,7 +91,7 @@ body {
 }
 
 .card + .card {
-  margin-top: 0;
+  margin-top: 10px;
 }
 
 .row {
@@ -228,6 +228,17 @@ button.btn:disabled {
   font-size: 11px;
   margin-top: 6px;
   min-height: 14px;
+}
+
+a.status-line {
+  color: var(--color-ink);
+  text-decoration: none;
+  padding: 3px 4px;
+  border-radius: 6px;
+  margin-top: 2px;
+}
+a.status-line:hover {
+  background: var(--color-surface);
 }
 
 .footer {

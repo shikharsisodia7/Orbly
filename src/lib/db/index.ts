@@ -4,6 +4,8 @@ import type {
   AccountStatusCacheRecord,
   ExclusionRuleRecord,
   FeedbackReportRecord,
+  FollowerCheckEntryRecord,
+  FollowerCheckRecord,
   ProtectedAccountRecord,
   QueueItemRecord,
   SettingsRecord,
@@ -24,6 +26,8 @@ export class OrblyDatabase extends Dexie {
   feedbackReports!: EntityTable<FeedbackReportRecord, "id">;
   accountBioCache!: EntityTable<AccountBioCacheRecord, "id">;
   accountStatusCache!: EntityTable<AccountStatusCacheRecord, "id">;
+  followerChecks!: EntityTable<FollowerCheckRecord, "id">;
+  followerCheckEntries!: EntityTable<FollowerCheckEntryRecord, "id">;
 
   constructor(name = "orbly-local") {
     super(name);
@@ -112,6 +116,24 @@ export class OrblyDatabase extends Dexie {
           rules.map((rule) => tx.table("exclusionRules").update(rule.id, normalizeExclusionRuleRecord(rule)))
         );
       });
+
+    // Adds the "Check Now" fast-unfollower-check history — deliberately
+    // separate from snapshots (see FollowerCheckRecord's doc comment for
+    // why), so this migration only adds new, independent stores.
+    this.version(6).stores({
+      snapshots: "id, createdAt, datasetHash, validity",
+      snapshotFollowers: "id, snapshotId, [snapshotId+normalizedUsername], normalizedUsername",
+      snapshotFollowing: "id, snapshotId, [snapshotId+normalizedUsername], normalizedUsername",
+      queueItems: "id, normalizedUsername, status, source, addedAt",
+      settings: "id",
+      protectedAccounts: "id, &normalizedUsername, dateAdded",
+      exclusionRules: "id, &[field+pattern], createdAt, field",
+      feedbackReports: "id, category, status, createdAt",
+      accountBioCache: "id, &normalizedUsername, fetchedAt",
+      accountStatusCache: "id, &normalizedUsername, status, checkedAt",
+      followerChecks: "id, checkedAt, snapshotId",
+      followerCheckEntries: "id, checkId, [checkId+normalizedUsername]",
+    });
   }
 }
 

@@ -8,6 +8,9 @@ import type {
   ExclusionRuleRecord,
   FeedbackCategory,
   FeedbackReportRecord,
+  FollowerCheckEntryRecord,
+  FollowerCheckRecord,
+  FollowerCheckSource,
   ProtectedAccountRecord,
   QueueItemRecord,
   QueueSource,
@@ -180,6 +183,8 @@ export async function deleteAllData(): Promise<void> {
       db.feedbackReports,
       db.accountBioCache,
       db.accountStatusCache,
+      db.followerChecks,
+      db.followerCheckEntries,
     ],
     async () => {
       await db.snapshots.clear();
@@ -192,6 +197,8 @@ export async function deleteAllData(): Promise<void> {
       await db.feedbackReports.clear();
       await db.accountBioCache.clear();
       await db.accountStatusCache.clear();
+      await db.followerChecks.clear();
+      await db.followerCheckEntries.clear();
     }
   );
 }
@@ -553,4 +560,69 @@ export async function updateFeedbackStatus(
 
 export async function deleteFeedbackReport(id: string): Promise<void> {
   await getDb().feedbackReports.delete(id);
+}
+
+// --- Follower checks ("Check Now" history) ---
+
+export interface RecordFollowerCheckInput {
+  source: FollowerCheckSource;
+  /** Set only for a web-import-triggered check — reuses that snapshot's own snapshotFollowers instead of duplicating them. */
+  snapshotId: string | null;
+  comparedToCheckedAt: string | null;
+  unfollowedCount: number;
+  newFollowerCount: number;
+  excludedCount: number;
+  /** The followers actually read at this check — stored as entries only when snapshotId is null (an extension check has no snapshot to point at). */
+  followers: Relationship[] | null;
+}
+
+export async function recordFollowerCheck(input: RecordFollowerCheckInput): Promise<FollowerCheckRecord> {
+  const db = getDb();
+  const record: FollowerCheckRecord = {
+    id: newId(),
+    checkedAt: new Date().toISOString(),
+    source: input.source,
+    snapshotId: input.snapshotId,
+    comparedToCheckedAt: input.comparedToCheckedAt,
+    unfollowedCount: input.unfollowedCount,
+    newFollowerCount: input.newFollowerCount,
+    excludedCount: input.excludedCount,
+  };
+
+  await db.transaction("rw", [db.followerChecks, db.followerCheckEntries], async () => {
+    await db.followerChecks.add(record);
+    if (!input.snapshotId && input.followers) {
+      const entries: FollowerCheckEntryRecord[] = input.followers.map((r) => ({
+        id: newId(),
+        checkId: record.id,
+        normalizedUsername: r.normalizedUsername,
+        displayUsername: r.displayUsername,
+        profileUrl: r.profileUrl,
+      }));
+      await db.followerCheckEntries.bulkAdd(entries);
+    }
+  });
+
+  return record;
+}
+
+export async function getFollowerChecks(): Promise<FollowerCheckRecord[]> {
+  const all = await getDb().followerChecks.toArray();
+  return all.sort((a, b) => b.checkedAt.localeCompare(a.checkedAt));
+}
+
+export async function getLatestFollowerCheck(): Promise<FollowerCheckRecord | null> {
+  const all = await getFollowerChecks();
+  return all[0] ?? null;
+}
+
+/** The followers list captured at a specific extension-triggered check (snapshotId null on that check). Empty for a web-import check — read its snapshot's snapshotFollowers instead. */
+export async function getFollowerCheckEntries(checkId: string): Promise<Relationship[]> {
+  const rows = await getDb().followerCheckEntries.where("checkId").equals(checkId).toArray();
+  return rows.map((r) => ({
+    normalizedUsername: r.normalizedUsername,
+    displayUsername: r.displayUsername,
+    profileUrl: r.profileUrl,
+    timestamp: null,
+  }));
 }

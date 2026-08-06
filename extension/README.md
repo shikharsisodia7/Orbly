@@ -14,32 +14,40 @@ into the same local database the Orbly web app uses — nothing more.
   already signed into and browsing yourself.
 - **No write actions.** It cannot follow, unfollow, like, or comment. It is
   read-only, full stop.
-- **No real-time/push monitoring.** It will not notify you the instant
-  someone unfollows you — that would require checking Instagram
-  automatically in the background, which this project intentionally avoids
-  (see the main repo's `docs/CASE_STUDY.md` for why). To see what's changed,
-  open Instagram and capture a fresh list yourself.
+- **No unattended/push monitoring.** There's a fast, one-click "Check Now"
+  (see below), but it only ever runs the instant you click it — it will
+  never notify you on its own or check in the background. That would require
+  polling Instagram automatically, which this project intentionally avoids
+  (see the main repo's `docs/CASE_STUDY.md` for why).
 - **No bulk bio scraping.** Bios are captured one account at a time, only
   when you're on that exact profile page and click "Look up this account."
   It will never fetch bios for your whole follower/following list.
 
 ## How it works
 
-1. **Capture a list.** Open your own `instagram.com/<you>/followers/` or
+1. **Check Now (the fast path).** On your own `instagram.com/<you>/followers/`
+   page, open the popup and click "Check Now." The content script reads
+   whatever's currently rendered in that list, hands it to Orbly (opened in a
+   background tab so you never have to leave Instagram), and the result —
+   who unfollowed you, who's new, timestamped against your last check —
+   comes straight back into the popup. One click, no re-import needed, and
+   every check is saved so you get a short history over time, not just the
+   latest diff.
+2. **Full sync.** Open your own `instagram.com/<you>/followers/` or
    `/following/` page, scroll so everyone you want is loaded, open the
    extension popup, and click "Capture." The content script reads the
    profile links already rendered in that dialog — it does not scroll or
    fetch anything for you.
-2. **Capture both lists**, one visit each. The popup tracks progress across
+3. **Capture both lists**, one visit each. The popup tracks progress across
    popup opens/closes (stored in `chrome.storage.local`, which never leaves
    your device).
-3. **Sync to Orbly.** Once both are captured, click "Sync to Orbly." The
+4. **Sync to Orbly.** Once both are captured, click "Sync to Orbly." The
    popup opens (or focuses) a tab on Orbly's `/app/extension-sync` page and
    hands off the captured data via a same-origin `window.postMessage` —
    Orbly's own page code writes it into the exact same IndexedDB the file
    importer uses, going through the exact same deleted/deactivated-account
    filtering.
-4. **Look up one account.** On any profile page, click "Look up this
+5. **Look up one account.** On any profile page, click "Look up this
    account" to read its bio and check whether it's still available. From
    there you can save the bio and/or add a bio-based exclusion rule in the
    Orbly chat.

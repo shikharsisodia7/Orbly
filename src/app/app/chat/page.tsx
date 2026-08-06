@@ -13,6 +13,7 @@ import { ExportWizard } from "@/components/import/ExportWizard";
 import { ProcessingStages, type ProcessingStageId } from "@/components/import/ProcessingStages";
 import { ToolResultCard } from "@/components/chat/ToolResultCard";
 import { ChatMarkdown } from "@/components/chat/ChatMarkdown";
+import { CheckNowPanel } from "@/components/dashboard/CheckNowPanel";
 import { Dialog } from "@/components/ui/Dialog";
 import { useSnapshots } from "@/hooks/useSnapshots";
 import { parseInstagramExport } from "@/lib/instagram/parser";
@@ -75,6 +76,7 @@ export default function ChatPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [manualUploadOpen, setManualUploadOpen] = useState(false);
   const [clearAllOpen, setClearAllOpen] = useState(false);
+  const [justImportedSnapshotId, setJustImportedSnapshotId] = useState<string | null>(null);
   const showUpload = loaded && (!hasData || manualUploadOpen);
 
   async function handleClearAll() {
@@ -119,8 +121,9 @@ export default function ChatPage() {
       }
 
       const existing = await findSnapshotByDatasetHash(hash);
+      let snapshotId = existing?.id ?? null;
       if (!existing) {
-        await createSnapshot({
+        const created = await createSnapshot({
           followers: result.followers,
           following: result.following,
           datasetHash: hash,
@@ -128,6 +131,7 @@ export default function ChatPage() {
           coverage: result.diagnostics.coverage,
           profileReference: null,
         });
+        snapshotId = created.id;
         await reconcileQueueWithFollowing(result.following);
         await updateSettings({ onboardingCompleted: true });
       }
@@ -136,6 +140,7 @@ export default function ChatPage() {
       await new Promise((r) => setTimeout(r, 500));
       setImportStage("upload");
       setManualUploadOpen(false);
+      setJustImportedSnapshotId(snapshotId);
     } catch (err) {
       setUploadError(
         err instanceof Error ? err.message : "Something went wrong reading that file. Please try again."
@@ -347,6 +352,19 @@ export default function ChatPage() {
         locally in your browser and stored on this device — this is the one feature that sends
         anything off of it.
       </p>
+
+      {justImportedSnapshotId && (
+        <div className="relative mb-4">
+          <button
+            onClick={() => setJustImportedSnapshotId(null)}
+            aria-label="Dismiss"
+            className="absolute -top-2 -right-2 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-border-strong bg-white text-ink-faint hover:text-ink"
+          >
+            ×
+          </button>
+          <CheckNowPanel snapshotId={justImportedSnapshotId} />
+        </div>
+      )}
 
       <div className="relative">
         <div

@@ -48,7 +48,7 @@ import type {
  * nothing here is persisted or computed anywhere but the user's own browser.
  */
 
-function isUsable(s: SnapshotRecord): boolean {
+export function isUsable(s: SnapshotRecord): boolean {
   return s.validity !== "partial" && s.validity !== "invalid";
 }
 
@@ -99,7 +99,7 @@ const NO_DATA_RESULT = {
  * protected, confirmed-gone-at-lookup-time, and exclusion rules (username
  * or bio, whichever the rule is scoped to).
  */
-interface SuggestionFilterContext {
+export interface SuggestionFilterContext {
   resolved: Set<string>;
   protectedUsernames: Set<string>;
   notFoundUsernames: Set<string>;
@@ -107,7 +107,7 @@ interface SuggestionFilterContext {
   bios: Map<string, string>;
 }
 
-async function buildSuggestionFilterContext(includeProtected: boolean): Promise<SuggestionFilterContext> {
+export async function buildSuggestionFilterContext(includeProtected: boolean): Promise<SuggestionFilterContext> {
   const [resolved, protectedUsernames, notFoundUsernames, exclusionRules, bios] = await Promise.all([
     getResolvedUsernames(),
     includeProtected ? Promise.resolve(new Set<string>()) : getProtectedUsernames(),
@@ -119,7 +119,7 @@ async function buildSuggestionFilterContext(includeProtected: boolean): Promise<
 }
 
 /** True if this account should still be actively suggested — false if resolved, protected, confirmed gone, or matching any exclusion rule (username or bio). */
-function isSuggestable(normalizedUsername: string, ctx: SuggestionFilterContext): boolean {
+export function isSuggestable(normalizedUsername: string, ctx: SuggestionFilterContext): boolean {
   if (ctx.resolved.has(normalizedUsername)) return false;
   if (ctx.protectedUsernames.has(normalizedUsername)) return false;
   if (ctx.notFoundUsernames.has(normalizedUsername)) return false;

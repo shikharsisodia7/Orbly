@@ -180,4 +180,50 @@ export interface FeedbackReportRecord {
   createdAt: string; // ISO timestamp
 }
 
-export const SCHEMA_VERSION = 5;
+export type FollowerCheckSource = "extension" | "web-import";
+
+/**
+ * A single "Check Now" — a fast, explicitly-triggered comparison of a fresh
+ * followers read against whatever followers data was most recently on file
+ * (either a prior check, or a full snapshot's followers), so "did anyone
+ * unfollow me" never has to wait for a full re-import.
+ *
+ * Deliberately NOT folded into SnapshotRecord: a snapshot represents a
+ * complete followers+following graph and its own validity assessment
+ * assumes both are present (assessDatasetValidity flags a missing
+ * following list as invalid) — forcing a followers-only check through that
+ * machinery would either corrupt validity for doesNotFollowBack/mutuals, or
+ * require faking a following list neither the extension nor a quick check
+ * ever has. A check-in is a separate, lightweight, followers-only concept.
+ *
+ * `snapshotId` is set only when this check was triggered right after a
+ * normal web-app import (that import already created a real SnapshotRecord
+ * with its own snapshotFollowers rows) — the check reuses that data instead
+ * of duplicating it. It's null for an extension-triggered check, which has
+ * no full snapshot at all; that check's own follower list lives in
+ * FollowerCheckEntryRecord rows instead.
+ */
+export interface FollowerCheckRecord {
+  id: string;
+  checkedAt: string; // ISO timestamp
+  source: FollowerCheckSource;
+  snapshotId: string | null;
+  /** ISO timestamp of whatever this check was compared against, or null if this was the very first check/snapshot on file. */
+  comparedToCheckedAt: string | null;
+  /** Counts as of this check, already net of exclusion-rule/protected/confirmed-gone filtering on the unfollowed side — see check-now.ts. */
+  unfollowedCount: number;
+  newFollowerCount: number;
+  /** How many raw unfollows were hidden by protection/exclusion rules/confirmed-gone status — surfaced so the user isn't left wondering why a number seems low. */
+  excludedCount: number;
+}
+
+/** One follower captured by an extension-triggered check — only ever written when FollowerCheckRecord.snapshotId is null. */
+export interface FollowerCheckEntryRecord {
+  id: string;
+  checkId: string;
+  normalizedUsername: string;
+  displayUsername: string;
+  profileUrl: string;
+}
+
+export const SCHEMA_VERSION = 6;

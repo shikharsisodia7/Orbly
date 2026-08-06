@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { UserMinus, History } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/PageHeader";
+import { CheckInHistory } from "@/components/dashboard/CheckInHistory";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ButtonLink } from "@/components/ui/ButtonLink";
 import { Button } from "@/components/ui/Button";
@@ -83,14 +84,26 @@ export default function UnfollowersPage() {
     );
   }
 
+  // Check-in history doesn't depend on having two full snapshots (a check-in
+  // can compare a snapshot against a quick extension check, or two quick
+  // checks against each other) — it's rendered above every empty-state
+  // branch below so it's never hidden behind the "needs 2 snapshots"
+  // requirement that only applies to the full snapshot-comparison view.
+  const checkInHistory = (
+    <div className="mb-4">
+      <CheckInHistory />
+    </div>
+  );
+
   if (snapshots.length < 2) {
     return (
       <>
         <PageHeader title="Recent Unfollowers" subtitle="People who stopped following you between two snapshots." />
+        {checkInHistory}
         <EmptyState
           icon={<History size={20} />}
           title="One more snapshot unlocks follower change tracking."
-          description="Import another Instagram export later and Orbly will show you exactly who stopped following you between the two."
+          description="Import another Instagram export later and Orbly will show you exactly who stopped following you between the two — or use Check Now in the browser extension, or right after your next import in chat, for a faster check in the meantime."
           action={<ButtonLink href="/app/import">Update Instagram Data</ButtonLink>}
         />
       </>
@@ -102,6 +115,7 @@ export default function UnfollowersPage() {
     return (
       <>
         <PageHeader title="Recent Unfollowers" subtitle="Lost followers detected between your snapshots." />
+        {checkInHistory}
         <EmptyState
           icon={<History size={20} />}
           title="Not enough complete snapshots to compare yet."
@@ -115,6 +129,8 @@ export default function UnfollowersPage() {
   return (
     <>
       <PageHeader title="Recent Unfollowers" subtitle="Lost followers detected between your snapshots." count={filtered.length} />
+
+      {checkInHistory}
 
       <div className="flex flex-wrap gap-2">
         {(
